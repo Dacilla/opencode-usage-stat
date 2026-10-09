@@ -33,17 +33,22 @@ function formatDuration(ms) {
   const s = Math.floor(ms % 6e4 / 1e3);
   return `${m}m ${s}s`;
 }
-function formatResetDuration(iso) {
+function formatResetDuration(iso, nowMs = Date.now()) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return iso;
-  const diff = d.getTime() - Date.now();
+  const diff = d.getTime() - nowMs;
   if (diff <= 0) return "now";
-  const mins = Math.round(diff / 6e4);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 48) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
+  const seconds = Math.ceil(diff / 1e3);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor(minutes % 1440 / 60);
+  const mins = minutes % 60;
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (mins > 0) parts.push(`${mins}m`);
+  return parts.join(" ");
 }
 function percentileSorted(sortedAsc, p) {
   if (sortedAsc.length === 0) return 0;
@@ -2368,7 +2373,7 @@ function collapsedSummary(windows, mode) {
   if (!windows || windows.length === 0) return null;
   const shown = (win) => {
     if (win.percent == null) return null;
-    return Math.round(mode === "remaining" ? 100 - win.percent : win.percent);
+    return (mode === "remaining" ? 100 - win.percent : win.percent).toFixed(1);
   };
   const isSessionWin = (label) => /(^|\b)(5h|session|rolling)\b/i.test(label);
   const isWeeklyWin = (label) => /(^|\b)(weekly|7d)\b/i.test(label);
@@ -2620,6 +2625,7 @@ async function migrateLegacySettings(context) {
 
 // src/provider-usage-blocks.tsx
 var REFRESH_MS = 2 * 60 * 1e3;
+var TICK_MS = 1e3;
 var BAR_WIDTH = 12;
 function splitBar(bar, markerIndex) {
   if (markerIndex == null) return [bar, "", ""];
@@ -2687,6 +2693,7 @@ function ProviderUsageBlocks(props) {
     loading: false,
     result: null
   })));
+  const [nowMs, setNowMs] = createSignal(Date.now());
   async function refreshOne(id) {
     setStates((prev) => prev.map((s) => s.id === id ? {
       ...s,
@@ -2712,6 +2719,9 @@ function ProviderUsageBlocks(props) {
         void refreshOne(id);
       }, REFRESH_MS));
     }
+    timers.push(setInterval(() => {
+      setNowMs(Date.now());
+    }, TICK_MS));
     onCleanup(() => {
       for (const timer of timers) clearInterval(timer);
     });
@@ -2867,10 +2877,11 @@ function ProviderUsageBlocks(props) {
                         const label = win.label ? win.label + ": " : "";
                         if (win.percent != null) {
                           const shownPercent = () => displayMode() === "remaining" ? 100 - win.percent : win.percent;
-                          const markerIndex = () => paceMarkerIndex(win, displayMode(), BAR_WIDTH);
+                          const markerIndex = () => paceMarkerIndex(win, displayMode(), BAR_WIDTH, nowMs());
                           const bar = () => splitBar(percentBar(shownPercent(), BAR_WIDTH), markerIndex());
-                          const paceColor = () => isOverPace(win) ? redColor() : greenColor();
-                          const percentText = () => `${Math.round(shownPercent())}%${displayMode() === "remaining" ? ` ${t("left")}` : ""}`;
+                          const paceColor = () => isOverPace(win, nowMs()) ? redColor() : greenColor();
+                          const resetText = () => win.resetsAt ? formatResetDuration(win.resetsAt, nowMs()) : "";
+                          const percentText = () => `${shownPercent().toFixed(1)}%${displayMode() === "remaining" ? ` ${t("left")}` : ""}`;
                           const poolCredits = isDollarPool ? displayMode() === "remaining" ? dollarPoolRemaining(win.valueLabel) : Math.max(0, totalDollars(win.valueLabel) - (dollarPoolRemaining(win.valueLabel) ?? 0)) : null;
                           const poolAllowance = isDollarPool ? totalDollars(win.valueLabel) : null;
                           return _$createComponent(Show, {
@@ -2933,7 +2944,7 @@ function ProviderUsageBlocks(props) {
                                 var _c$2 = _$memo(() => !!win.resetsAt);
                                 return () => _c$2() ? (() => {
                                   var _el$27 = _$createElement("span");
-                                  _$insert(_el$27, () => ` \xB7 ${t("providerResets")} ${formatResetDuration(win.resetsAt)}`);
+                                  _$insert(_el$27, () => ` \xB7 ${t("providerResets")} ${resetText()}`);
                                   _$effect((_$p) => _$setProp(_el$27, "style", {
                                     fg: dimColor()
                                   }, _$p));

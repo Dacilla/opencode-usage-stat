@@ -1511,9 +1511,9 @@ export function shortDollars(value: number): string {
  */
 export function collapsedSummary(windows: UsageWindow[] | undefined, mode: UsageDisplayMode): string | null {
   if (!windows || windows.length === 0) return null
-  const shown = (win: UsageWindow): number | null => {
+  const shown = (win: UsageWindow): string | null => {
     if (win.percent == null) return null
-    return Math.round(mode === "remaining" ? 100 - win.percent : win.percent)
+    return (mode === "remaining" ? 100 - win.percent : win.percent).toFixed(1)
   }
   const isSessionWin = (label: string): boolean => /(^|\b)(5h|session|rolling)\b/i.test(label)
   const isWeeklyWin = (label: string): boolean => /(^|\b)(weekly|7d)\b/i.test(label)

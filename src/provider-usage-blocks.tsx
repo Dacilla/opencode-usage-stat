@@ -36,10 +36,8 @@ import { resolveThemeColors } from "./theme-map.js"
 import { getSettingsStore } from "./settings.js"
 
 const REFRESH_MS = 2 * 60 * 1000 // every 2 minutes
-/** Clock tick for time-derived display (pace marker + reset countdown). Cheap
- * re-render only — no provider API calls. 30s keeps minute-level countdowns
- * fresh between the 2-minute data polls. */
-const TICK_MS = 30 * 1000
+// Update countdowns and pace markers locally; never poll provider APIs on ticks.
+const TICK_MS = 1000
 
 /** Bar width in cells (also the pace-marker coordinate space). */
 const BAR_WIDTH = 12
@@ -133,8 +131,6 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
     enabledIds.map(id => ({ id, loading: false, result: null })),
   )
 
-  // Wall-clock for pace markers + reset countdowns. Re-renders time-derived
-  // display between provider polls without hitting provider APIs.
   const [nowMs, setNowMs] = createSignal(Date.now())
 
   async function refreshOne(id: ProviderId): Promise<void> {
@@ -257,14 +253,9 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
                           const markerIndex = () => paceMarkerIndex(win, displayMode(), BAR_WIDTH, nowMs())
                           const bar = () => splitBar(percentBar(shownPercent(), BAR_WIDTH), markerIndex())
                           const paceColor = () => (isOverPace(win, nowMs()) ? redColor() : greenColor())
-                          // Subscribe to the clock tick so the countdown
-                          // re-renders between provider polls.
-                          const resetText = () => {
-                            nowMs()
-                            return win.resetsAt ? formatResetDuration(win.resetsAt) : ""
-                          }
+                          const resetText = () => win.resetsAt ? formatResetDuration(win.resetsAt, nowMs()) : ""
                           const percentText = () =>
-                            `${Math.round(shownPercent())}%${displayMode() === "remaining" ? ` ${t("left")}` : ""}`
+                            `${shownPercent().toFixed(1)}%${displayMode() === "remaining" ? ` ${t("left")}` : ""}`
                           const poolCredits = isDollarPool
                             ? (displayMode() === "remaining"
                               ? dollarPoolRemaining(win.valueLabel)

@@ -194,24 +194,26 @@ export function formatDuration(ms: number | null): string {
 }
 
 /**
- * Relative time until an ISO reset timestamp ("now"/"5m"/"3h"/"2d").
+ * Relative time until an ISO reset timestamp ("now"/"45s"/"5m"/"3h 12m"/"2d 3h 12m").
  * Single shared implementation (previously duplicated with diverging behavior
  * in provider-usage.ts and provider-usage-blocks.tsx).
  */
-export function formatResetDuration(iso: string): string {
+export function formatResetDuration(iso: string, nowMs: number = Date.now()): string {
   const d = new Date(iso)
   if (!Number.isFinite(d.getTime())) return iso
-  const diff = d.getTime() - Date.now()
+  const diff = d.getTime() - nowMs
   if (diff <= 0) return "now"
-  const mins = Math.round(diff / 60000)
-  if (mins < 1) return "now"
-  if (mins < 60) return `${mins}m`
-  const hours = Math.floor(mins / 60)
-  if (hours < 48) return `${hours}h`
-  const days = Math.floor(hours / 24)
-  const remHours = hours % 24
-  if (remHours === 0) return `${days}d`
-  return `${days}d ${remHours}h`
+  const seconds = Math.ceil(diff / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const days = Math.floor(minutes / 1440)
+  const hours = Math.floor((minutes % 1440) / 60)
+  const mins = minutes % 60
+  const parts: string[] = []
+  if (days > 0) parts.push(`${days}d`)
+  if (hours > 0) parts.push(`${hours}h`)
+  if (mins > 0) parts.push(`${mins}m`)
+  return parts.join(" ")
 }
 
 /** Linear-interpolation percentile over a sorted-ascending array. */

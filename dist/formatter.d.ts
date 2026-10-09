@@ -163,11 +163,11 @@ export declare function formatTokens(n: number): string;
 export declare function formatCost(n: number): string;
 export declare function formatDuration(ms: number | null): string;
 /**
- * Relative time until an ISO reset timestamp ("now"/"5m"/"3h"/"2d").
+ * Relative time until an ISO reset timestamp ("now"/"45s"/"5m"/"3h 12m"/"2d 3h 12m").
  * Single shared implementation (previously duplicated with diverging behavior
  * in provider-usage.ts and provider-usage-blocks.tsx).
  */
-export declare function formatResetDuration(iso: string): string;
+export declare function formatResetDuration(iso: string, nowMs?: number): string;
 /** Linear-interpolation percentile over a sorted-ascending array. */
 export declare function percentileSorted(sortedAsc: number[], p: number): number;
 export declare function cacheHitRate(input: number, cacheRead: number): number;

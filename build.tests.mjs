@@ -22,6 +22,7 @@ const external = [
 
 const files = [
   "test/provider-usage.test.ts",
+  "test/provider-display.test.ts",
   "test/formatter.test.ts",
   "test/queries.test.ts",
   "test/credentials.test.ts",

@@ -459,7 +459,7 @@ test("parseClaudeUsage extracts 5h/weekly windows and ignores monthly extras in 
   assert.equal(windows[1].label, "7d")
   assert.equal(windows[0].startsAt, "2026-08-23T13:00:00.000Z")
   assert.equal(windows[1].startsAt, "2026-08-18T00:00:00.000Z")
-  assert.equal(collapsedSummary(windows, "used"), "37%/5h 13%/7d")
+  assert.equal(collapsedSummary(windows, "used"), "37.4%/5h 12.5%/7d")
 })
 
 test("parseClaudeUsage falls back to legacy five_hour/seven_day and adds scoped models after aggregates", () => {
@@ -657,8 +657,8 @@ test("collapsedSummary shows 5h/weekly pair and skips monthly/billing windows", 
     { label: "7d", percent: 34.6, resetsAt: null, valueLabel: null },
     { label: "Monthly", percent: 90, resetsAt: null, valueLabel: null },
   ]
-  assert.equal(collapsedSummary(windows, "used"), "12%/5h 35%/7d")
-  assert.equal(collapsedSummary(windows, "remaining"), "88%/5h 65%/7d")
+  assert.equal(collapsedSummary(windows, "used"), "12.0%/5h 34.6%/7d")
+  assert.equal(collapsedSummary(windows, "remaining"), "88.0%/5h 65.4%/7d")
 })
 
 test("collapsedSummary falls back gracefully per provider shape", () => {
@@ -666,7 +666,7 @@ test("collapsedSummary falls back gracefully per provider shape", () => {
     { label: "Rolling", percent: 5, resetsAt: null, valueLabel: null },
     { label: "Weekly", percent: 9, resetsAt: null, valueLabel: null },
     { label: "Monthly", percent: 77, resetsAt: null, valueLabel: null },
-  ], "used"), "5%/5h 9%/7d")
+  ], "used"), "5.0%/5h 9.0%/7d")
   assert.equal(collapsedSummary([{ label: "Balance", percent: null, resetsAt: null, valueLabel: "$5.00" }], "used"), "$5.00")
   assert.equal(collapsedSummary([], "used"), null)
   assert.equal(collapsedSummary(undefined, "used"), null)
@@ -674,7 +674,7 @@ test("collapsedSummary falls back gracefully per provider shape", () => {
   assert.equal(collapsedSummary([
     { label: "Tokens", percent: 44, resetsAt: null, valueLabel: null },
     { label: "MCP Tools", percent: 3, resetsAt: null, valueLabel: null },
-  ], "used"), "44%")
+  ], "used"), "44.0%")
 })
 
 // ── Ollama Cloud new-billing display ──
@@ -683,8 +683,8 @@ test("ollama collapsed summary shows remaining dollar valueLabel", () => {
   const windows = [
     { label: "Monthly", percent: 20.833, resetsAt: null, valueLabel: "$47.50 / $60.00 left" },
   ]
-  assert.equal(collapsedSummary(windows, "remaining"), "79%/47.5$")
-  assert.equal(collapsedSummary(windows, "used"), "21%/12.5$")
+  assert.equal(collapsedSummary(windows, "remaining"), "79.2%/47.5$")
+  assert.equal(collapsedSummary(windows, "used"), "20.8%/12.5$")
 })
 
 test("parseOllamaSettingsHtml monthly valueLabel carries remaining dollars", () => {

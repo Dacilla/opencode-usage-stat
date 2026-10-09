@@ -48,7 +48,7 @@ import { formatResetDuration } from "./formatter.js"
 import { resolveThemeColors } from "./theme-map.js"
 import { getSettingsStore } from "./settings.js"
 import { truncateToWidth, visualWidth } from "./text-width.js"
-import { percentBar, providerHeaderFit, providerRowLayout, usageLevel } from "./tui-layout.js"
+import { percentBar, providerHeaderFit, usageLevel } from "./tui-layout.js"
 import type { UsageLevel } from "./tui-layout.js"
 
 const REFRESH_MS = 2 * 60 * 1000 // every 2 minutes
@@ -474,16 +474,10 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
                               ` ${shownPercent().toFixed(1)}%${displayMode() === "remaining" ? ` ${t("left")}` : ""}`
                             const bar = () => splitBar(percentBar(shownPercent(), BAR_WIDTH), markerIndex())
                             // Live countdown: re-renders on the 1s clock tick.
+                            // Always rendered (pre-merge behavior): the width-
+                            // budgeted layout dropped it first on Monthly, whose
+                            // label and reset are the longest.
                             const resetText = () => win.resetsAt ? formatResetDuration(win.resetsAt, nowMs()) : ""
-                            const layout = () => {
-                              return providerRowLayout(
-                                contentWidth(),
-                                label,
-                                percentSuffix(),
-                                resetText() ? ` · ${t("providerResets")} ${resetText()}` : "",
-                                resetText() ? ` · ${resetText()}` : "",
-                              )
-                            }
                             // Dollar pools render "Monthly: [bar] N% left" plus
                             // a second line "[credits]$/[allowance]$"; other
                             // windows keep " · resets <duration>".
@@ -514,8 +508,10 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
                                   <span style={{ fg: winColor() } as any}>{bar()[0]}</span>
                                   <span style={{ fg: paceColor() } as any}>{bar()[1]}</span>
                                   <span style={{ fg: winColor() } as any}>{bar()[2]}{percentSuffix()}</span>
-                                  {layout().reset ? (
-                                    <span style={{ fg: dimColor() } as any}>{layout().reset}</span>
+                                  {win.resetsAt ? (
+                                    <span style={{ fg: dimColor() } as any}>
+                                      {` · ${t("providerResets")} ${resetText()}`}
+                                    </span>
                                   ) : null}
                                 </text>
                               </Show>

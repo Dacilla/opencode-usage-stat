@@ -3567,18 +3567,6 @@ function distBarWidth(contentWidth, prefixWidth, suffix, showTrend) {
   const suffixW = Math.max(budget, visualWidth(suffix));
   return clamp(contentWidth - prefixWidth - suffixW, DIST_BAR_MIN, DIST_BAR_MAX);
 }
-var PROVIDER_BAR_MIN = 5;
-var PROVIDER_BAR_MAX = 20;
-function providerRowLayout(contentWidth, label, suffix, reset, compactReset) {
-  const fixed = visualWidth(label) + visualWidth(suffix);
-  for (const r of reset ? [reset, compactReset, ""] : [""]) {
-    const bar = contentWidth - fixed - visualWidth(r);
-    if (bar >= PROVIDER_BAR_MIN || r === "") {
-      return { barWidth: clamp(bar, PROVIDER_BAR_MIN, PROVIDER_BAR_MAX), reset: r };
-    }
-  }
-  return { barWidth: PROVIDER_BAR_MIN, reset: "" };
-}
 function providerHeaderFit(available, name, right) {
   const chrome = 4;
   const fittedName = truncateToWidth(name, Math.max(1, available - chrome));
@@ -4023,9 +4011,6 @@ function ProviderUsageBlocks(props) {
                             const percentSuffix = () => ` ${shownPercent().toFixed(1)}%${displayMode() === "remaining" ? ` ${t("left")}` : ""}`;
                             const bar = () => splitBar(percentBar(shownPercent(), BAR_WIDTH), markerIndex());
                             const resetText = () => win.resetsAt ? formatResetDuration(win.resetsAt, nowMs()) : "";
-                            const layout = () => {
-                              return providerRowLayout(contentWidth(), label, percentSuffix(), resetText() ? ` \xB7 ${t("providerResets")} ${resetText()}` : "", resetText() ? ` \xB7 ${resetText()}` : "");
-                            };
                             const poolCredits = isDollarPool ? displayMode() === "remaining" ? dollarPoolRemaining(win.valueLabel) : Math.max(0, totalDollars(win.valueLabel) - (dollarPoolRemaining(win.valueLabel) ?? 0)) : null;
                             const poolAllowance = isDollarPool ? totalDollars(win.valueLabel) : null;
                             return _$createComponent(Show, {
@@ -4083,10 +4068,10 @@ function ProviderUsageBlocks(props) {
                                 _$insert(_el$16, () => bar()[2], null);
                                 _$insert(_el$16, percentSuffix, null);
                                 _$insert(_el$13, (() => {
-                                  var _c$ = _$memo(() => !!layout().reset);
+                                  var _c$ = _$memo(() => !!win.resetsAt);
                                   return () => _c$() ? (() => {
                                     var _el$24 = _$createElement("span");
-                                    _$insert(_el$24, () => layout().reset);
+                                    _$insert(_el$24, () => ` \xB7 ${t("providerResets")} ${resetText()}`);
                                     _$effect((_$p) => _$setProp(_el$24, "style", {
                                       fg: dimColor()
                                     }, _$p));

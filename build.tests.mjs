@@ -22,9 +22,12 @@ const external = [
 
 const files = [
   "test/provider-usage.test.ts",
-  "test/provider-display.test.ts",
+    "test/provider-display.test.ts",
+   "test/droid-usage.test.ts",
+   "test/factory-keyring.test.ts",
   "test/formatter.test.ts",
   "test/queries.test.ts",
+  "test/sqlite-source.test.ts",
   "test/credentials.test.ts",
   "test/perf-tracker.test.ts",
   "test/stats-store.test.ts",

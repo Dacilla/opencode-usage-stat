@@ -5,13 +5,15 @@ export interface UsageStatSettings {
     showPerformance: boolean;
     showPricing: boolean;
     showTrend: boolean;
+    /** Whether provider usage rows show the pace-marker percentage (`│43%`). */
+    showPace: boolean;
     /** Whether provider usage percentages show used or remaining quota. */
     providerUsageDisplay: UsageDisplayMode;
     language: LanguageSetting;
 }
 export declare const SETTINGS_KEY = "usage-stat-settings";
 export declare const DEFAULT_SETTINGS: UsageStatSettings;
-/** Seed values from plugin options (`sidebar.*`, `language`, `providerUsageDisplay`). */
+/** Seed values from plugin options (`sidebar.*`, `showPace`, `language`, `providerUsageDisplay`). */
 export declare function optionsToSettings(options: unknown): Partial<UsageStatSettings>;
 type SettingsStore = readonly [UsageStatSettings, (mutation: (draft: UsageStatSettings) => void) => Promise<void>];
 /**

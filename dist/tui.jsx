@@ -33,7 +33,7 @@ function formatDuration(ms) {
   const s = Math.floor(ms % 6e4 / 1e3);
   return `${m}m ${s}s`;
 }
-function formatResetDuration(iso, nowMs = Date.now()) {
+function formatResetDuration(iso, nowMs = Date.now(), maxUnits = 0) {
   const d = new Date(iso);
   if (!Number.isFinite(d.getTime())) return iso;
   const diff = d.getTime() - nowMs;
@@ -48,7 +48,20 @@ function formatResetDuration(iso, nowMs = Date.now()) {
   if (days > 0) parts.push(`${days}d`);
   if (hours > 0) parts.push(`${hours}h`);
   if (mins > 0) parts.push(`${mins}m`);
-  return parts.join(" ");
+  return (maxUnits > 0 ? parts.slice(0, maxUnits) : parts).join(" ");
+}
+function formatDurationSpan(ms, maxUnits = 0) {
+  if (!Number.isFinite(ms) || ms <= 0) return "now";
+  if (ms < 6e4) return `${Math.max(1, Math.round(ms / 1e3))}s`;
+  const minutes = Math.floor(ms / 6e4);
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor(minutes % 1440 / 60);
+  const mins = minutes % 60;
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (mins > 0) parts.push(`${mins}m`);
+  return (maxUnits > 0 ? parts.slice(0, maxUnits) : parts).join(" ");
 }
 function percentileSorted(sortedAsc, p) {
   if (sortedAsc.length === 0) return 0;
@@ -757,6 +770,7 @@ var zh = {
   showPerformance: "\u663E\u793A\u6027\u80FD\u6307\u6807",
   showPricing: "\u663E\u793A\u6A21\u578B\u5B9A\u4EF7",
   showTrend: "\u663E\u793A\u8D8B\u52BF\u6307\u793A\u5668",
+  showPace: "\u8FDB\u5EA6\u767E\u5206\u6BD4",
   language: "\u8BED\u8A00",
   auto: "\u81EA\u52A8",
   cmdTitleHtml: "HTML\u62A5\u544A",
@@ -775,6 +789,7 @@ var zh = {
   descShowPerformance: "\u5728\u4FA7\u8FB9\u680F\u663E\u793ATPS\u3001TTFT\u3001\u5EF6\u8FDF\u7B49\u6307\u6807",
   descShowPricing: "\u5728\u4FA7\u8FB9\u680F\u663E\u793A\u6210\u672C\u4F30\u7B97",
   descShowTrend: "\u5728\u4FA7\u8FB9\u680F\u663E\u793AToken\u7528\u91CF\u8D8B\u52BF",
+  descShowPace: "\u5728\u914D\u989D\u7528\u91CF\u884C\u663E\u793A\u9884\u7B97\u8FDB\u5EA6\u767E\u5206\u6BD4",
   settingsLanguage: "\u8BED\u8A00",
   descSettingsLanguage: "\u5207\u6362\u663E\u793A\u8BED\u8A00",
   settingsTitle: "Usage Stat \u8BBE\u7F6E",
@@ -853,6 +868,7 @@ var en = {
   showPerformance: "Show Performance",
   showPricing: "Show Pricing",
   showTrend: "Show Trend",
+  showPace: "Pace %",
   language: "Language",
   auto: "Auto",
   cmdTitleHtml: "HTML Report",
@@ -871,6 +887,7 @@ var en = {
   descShowPerformance: "Display TPS, TTFT, latency metrics in sidebar",
   descShowPricing: "Display cost estimates in sidebar",
   descShowTrend: "Display token usage trend in sidebar",
+  descShowPace: "Show the pace-marker percentage on provider usage rows",
   settingsLanguage: "Language",
   descSettingsLanguage: "Switch display language",
   settingsTitle: "Usage Stat Settings",
@@ -924,6 +941,8 @@ function t(key) {
 }
 
 // src/provider-usage-blocks.tsx
+import { spread as _$spread } from "@opentui/solid";
+import { mergeProps as _$mergeProps } from "@opentui/solid";
 import { effect as _$effect } from "@opentui/solid";
 import { createTextNode as _$createTextNode } from "@opentui/solid";
 import { insertNode as _$insertNode } from "@opentui/solid";
@@ -2694,11 +2713,11 @@ function summarize(name, windows) {
   const first = windows[0];
   if (!first) return `${name} \u2014 no data`;
   if (first.valueLabel) {
-    if (first.resetsAt) return `${name} \u2014 ${first.valueLabel} \xB7 resets ${formatResetDuration(first.resetsAt)}`;
+    if (first.resetsAt) return `${name} \u2014 ${first.valueLabel} \u21BB ${formatResetDuration(first.resetsAt, Date.now(), 2)}`;
     return `${name} \u2014 ${first.valueLabel}`;
   }
   if (first.percent != null) {
-    const suffix = first.resetsAt ? ` \xB7 resets ${formatResetDuration(first.resetsAt)}` : "";
+    const suffix = first.resetsAt ? ` \u21BB ${formatResetDuration(first.resetsAt, Date.now(), 2)}` : "";
     return `${name} \u2014 ${first.percent.toFixed(0)}%${suffix}`;
   }
   return name;
@@ -3359,6 +3378,10 @@ var DEFAULT_SETTINGS = {
   showPerformance: true,
   showPricing: true,
   showTrend: true,
+  // Off by default: at ~31 usable row cells an inline readout makes the reset
+  // wrap at a different point per row (Monthly's label is longest), which
+  // renders ragged. The pace % is on hover instead; enable in /usage to try it.
+  showPace: false,
   providerUsageDisplay: "used",
   language: "auto"
 };
@@ -3371,6 +3394,7 @@ function optionsToSettings(options) {
       if (typeof cfg.sidebar.showPricing === "boolean") out.showPricing = cfg.sidebar.showPricing;
       if (typeof cfg.sidebar.showTrend === "boolean") out.showTrend = cfg.sidebar.showTrend;
     }
+    if (typeof cfg?.showPace === "boolean") out.showPace = cfg.showPace;
     if (cfg?.language === "zh" || cfg?.language === "en" || cfg?.language === "auto") out.language = cfg.language;
     if (cfg?.providerUsageDisplay === "used" || cfg?.providerUsageDisplay === "remaining") {
       out.providerUsageDisplay = cfg.providerUsageDisplay;
@@ -3391,7 +3415,7 @@ async function migrateLegacySettings(context) {
     const [settings, mutate] = getSettingsStore(context);
     const [legacy] = context.storage.store(LEGACY_KEY, { initial: {} });
     const patch = {};
-    for (const key of ["showPerformance", "showPricing", "showTrend", "providerUsageDisplay", "language"]) {
+    for (const key of ["showPerformance", "showPricing", "showTrend", "showPace", "providerUsageDisplay", "language"]) {
       const value = legacy?.[key];
       if (value !== void 0 && value !== null && settings[key] !== value && settings[key] === DEFAULT_SETTINGS[key]) {
         patch[key] = value;
@@ -3579,10 +3603,18 @@ function usageLevel(usedPercent) {
   if (usedPercent >= 70) return "warn";
   return "ok";
 }
-function percentBar(percent, width) {
-  const p = Number.isFinite(percent) ? percent : 0;
-  const filled = Math.max(0, Math.min(width, Math.floor(p / 100 * width)));
-  return "\u2588".repeat(filled) + "\u2591".repeat(Math.max(0, width - filled));
+var EIGHTH_BLOCKS = ["", "\u258F", "\u258E", "\u258D", "\u258C", "\u258B", "\u258A", "\u2589"];
+function percentBarSmooth(percent, width) {
+  const p = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0;
+  const w = Math.max(0, Math.floor(width));
+  if (w === 0) return "";
+  const cells = p / 100 * w;
+  const full = Math.min(w, Math.floor(cells));
+  const eighths = Math.round((cells - full) * 8);
+  if (eighths >= 8) return "\u2588".repeat(Math.min(w, full + 1)) + "\u2591".repeat(Math.max(0, w - full - 1));
+  const head = eighths > 0 && full < w ? EIGHTH_BLOCKS[eighths] : "";
+  const empty = Math.max(0, w - full - (head ? 1 : 0));
+  return "\u2588".repeat(full) + head + "\u2591".repeat(empty);
 }
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, Math.floor(value)));
@@ -3591,10 +3623,53 @@ function clamp(value, min, max) {
 // src/provider-usage-blocks.tsx
 var REFRESH_MS = 2 * 60 * 1e3;
 var TICK_MS = 1e3;
+var TWEEN_MS = 260;
+function createSmoothPercents() {
+  const [values, setValues] = createSignal({});
+  const pending = /* @__PURE__ */ new Map();
+  let timer = null;
+  const tick = () => {
+    const now = Date.now();
+    const out = {};
+    let running = false;
+    for (const [label, m] of pending) {
+      const t2 = Math.min(1, (now - m.start) / TWEEN_MS);
+      const eased = 1 - Math.pow(1 - t2, 3);
+      out[label] = t2 >= 1 ? m.target : m.from + (m.target - m.from) * eased;
+      if (t2 < 1) running = true;
+    }
+    setValues(out);
+    if (!running && timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+  return {
+    get: (label) => values()[label],
+    set: (label, target) => {
+      const prev = pending.get(label);
+      const from = prev ? values()[label] ?? target : target;
+      pending.set(label, {
+        from,
+        target,
+        start: Date.now()
+      });
+      if (!timer) timer = setInterval(tick, 16);
+      tick();
+    },
+    stop: () => {
+      pending.clear();
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }
+  };
+}
 var BAR_WIDTH = 12;
 function splitBar(bar, markerIndex) {
   if (markerIndex == null) return [bar, "", ""];
-  return [bar.slice(0, markerIndex), "\u2502", bar.slice(markerIndex + 1)];
+  return [bar.slice(0, markerIndex), "\u2588", bar.slice(markerIndex + 1)];
 }
 var PROVIDER_NAMES = Object.fromEntries(PROVIDERS.map((p) => [p.id, p.name]));
 var FALLBACK_COLOR = RGBA2.fromInts(80, 190, 255, 255);
@@ -3652,6 +3727,7 @@ function ProviderUsageBlocks(props) {
   } catch {
   }
   const displayMode = () => settingsStore?.providerUsageDisplay === "remaining" ? "remaining" : "used";
+  const showPace = () => settingsStore?.showPace !== false;
   const isCollapsed = (id) => {
     const override = localCollapse()[id];
     if (override !== void 0) return override;
@@ -3915,6 +3991,13 @@ function ProviderUsageBlocks(props) {
             return status.startsWith(prefix) ? status.slice(prefix.length) : status;
           };
           const header = () => providerHeaderFit(panelWidth() - HEADER_INSET, PROVIDER_NAMES[state.id] ?? state.id, headerText());
+          const smooth = createSmoothPercents();
+          createEffect(() => {
+            for (const w of state.result?.windows ?? []) {
+              if (w.percent != null) smooth.set(w.label, w.percent);
+            }
+          });
+          onCleanup(() => smooth.stop());
           return (() => {
             var _el$2 = _$createElement("box"), _el$3 = _$createElement("box"), _el$4 = _$createElement("text"), _el$5 = _$createElement("span"), _el$6 = _$createTextNode(` `), _el$7 = _$createElement("span"), _el$8 = _$createElement("text");
             _$insertNode(_el$2, _el$3);
@@ -4005,12 +4088,33 @@ function ProviderUsageBlocks(props) {
                         const winColor = () => levelColor(usageLevel(win.percent));
                         const markerIndex = () => paceMarkerIndex(win, displayMode(), BAR_WIDTH, nowMs());
                         const paceColor = () => isOverPace(win, nowMs()) ? redColor() : greenColor();
+                        const paceShown = () => {
+                          const pace = windowPacePercent(win, nowMs());
+                          return pace == null ? null : displayMode() === "remaining" ? 100 - pace : pace;
+                        };
+                        const [hover, setHover] = createSignal(false);
+                        const rowMouse = {
+                          onMouseOver: () => setHover(true),
+                          onMouseOut: () => setHover(false)
+                        };
                         function renderWindow() {
                           if (win.percent != null) {
-                            const shownPercent = () => displayMode() === "remaining" ? 100 - win.percent : win.percent;
+                            const shownPercent = () => {
+                              const smoothed = smooth.get(win.label);
+                              const pct2 = smoothed != null ? smoothed : win.percent;
+                              return displayMode() === "remaining" ? 100 - pct2 : pct2;
+                            };
                             const percentSuffix = () => ` ${shownPercent().toFixed(1)}%${displayMode() === "remaining" ? ` ${t("left")}` : ""}`;
-                            const bar = () => splitBar(percentBar(shownPercent(), BAR_WIDTH), markerIndex());
-                            const resetText = () => win.resetsAt ? formatResetDuration(win.resetsAt, nowMs()) : "";
+                            const bar = () => splitBar(percentBarSmooth(shownPercent(), BAR_WIDTH), markerIndex());
+                            const resetText = () => win.resetsAt ? formatResetDuration(win.resetsAt, nowMs(), 2) : "";
+                            const hoverText = () => {
+                              if (!win.startsAt || !win.resetsAt) return "";
+                              const start = Date.parse(win.startsAt);
+                              const end = Date.parse(win.resetsAt);
+                              const pace = paceShown();
+                              const pacePart = pace != null ? `\u2502${Math.round(pace)}% \xB7 ` : "";
+                              return ` \xB7 ${pacePart}${formatDurationSpan(nowMs() - start, 2)} / ${formatDurationSpan(end - start, 2)} elapsed`;
+                            };
                             const poolCredits = isDollarPool ? displayMode() === "remaining" ? dollarPoolRemaining(win.valueLabel) : Math.max(0, totalDollars(win.valueLabel) - (dollarPoolRemaining(win.valueLabel) ?? 0)) : null;
                             const poolAllowance = isDollarPool ? totalDollars(win.valueLabel) : null;
                             return _$createComponent(Show, {
@@ -4032,20 +4136,20 @@ function ProviderUsageBlocks(props) {
                                   _$insertNode(_el$22, _el$23);
                                   _$insert(_el$23, () => `${shortDollars(poolCredits ?? 0)}$/${shortDollars(poolAllowance ?? 0)}$`);
                                   _$effect((_p$) => {
-                                    var _v$9 = mutedColor(), _v$0 = {
+                                    var _v$8 = mutedColor(), _v$9 = {
                                       fg: winColor()
-                                    }, _v$1 = {
+                                    }, _v$0 = {
                                       fg: paceColor()
+                                    }, _v$1 = {
+                                      fg: winColor()
                                     }, _v$10 = {
                                       fg: winColor()
-                                    }, _v$11 = {
-                                      fg: winColor()
                                     };
-                                    _v$9 !== _p$.e && (_p$.e = _$setProp(_el$18, "fg", _v$9, _p$.e));
-                                    _v$0 !== _p$.t && (_p$.t = _$setProp(_el$19, "style", _v$0, _p$.t));
-                                    _v$1 !== _p$.a && (_p$.a = _$setProp(_el$20, "style", _v$1, _p$.a));
-                                    _v$10 !== _p$.o && (_p$.o = _$setProp(_el$21, "style", _v$10, _p$.o));
-                                    _v$11 !== _p$.i && (_p$.i = _$setProp(_el$23, "style", _v$11, _p$.i));
+                                    _v$8 !== _p$.e && (_p$.e = _$setProp(_el$18, "fg", _v$8, _p$.e));
+                                    _v$9 !== _p$.t && (_p$.t = _$setProp(_el$19, "style", _v$9, _p$.t));
+                                    _v$0 !== _p$.a && (_p$.a = _$setProp(_el$20, "style", _v$0, _p$.a));
+                                    _v$1 !== _p$.o && (_p$.o = _$setProp(_el$21, "style", _v$1, _p$.o));
+                                    _v$10 !== _p$.i && (_p$.i = _$setProp(_el$23, "style", _v$10, _p$.i));
                                     return _p$;
                                   }, {
                                     e: void 0,
@@ -4062,40 +4166,57 @@ function ProviderUsageBlocks(props) {
                                 _$insertNode(_el$13, _el$14);
                                 _$insertNode(_el$13, _el$15);
                                 _$insertNode(_el$13, _el$16);
+                                _$spread(_el$13, _$mergeProps({
+                                  get fg() {
+                                    return mutedColor();
+                                  }
+                                }, rowMouse), true);
                                 _$insert(_el$13, label, _el$14);
                                 _$insert(_el$14, () => bar()[0]);
                                 _$insert(_el$15, () => bar()[1]);
                                 _$insert(_el$16, () => bar()[2], null);
                                 _$insert(_el$16, percentSuffix, null);
                                 _$insert(_el$13, (() => {
-                                  var _c$ = _$memo(() => !!win.resetsAt);
+                                  var _c$ = _$memo(() => !!(showPace() && paceShown() != null));
                                   return () => _c$() ? (() => {
                                     var _el$24 = _$createElement("span");
-                                    _$insert(_el$24, () => ` \xB7 ${t("providerResets")} ${resetText()}`);
+                                    _$insert(_el$24, () => ` \u2502${Math.round(paceShown())}%`);
                                     _$effect((_$p) => _$setProp(_el$24, "style", {
                                       fg: dimColor()
                                     }, _$p));
                                     return _el$24;
                                   })() : null;
                                 })(), null);
+                                _$insert(_el$13, (() => {
+                                  var _c$2 = _$memo(() => !!win.resetsAt);
+                                  return () => _c$2() ? (() => {
+                                    var _el$25 = _$createElement("span");
+                                    _$insert(_el$25, (() => {
+                                      var _c$3 = _$memo(() => !!hover());
+                                      return () => _c$3() ? hoverText() : ` \u21BB ${resetText()}`;
+                                    })());
+                                    _$effect((_$p) => _$setProp(_el$25, "style", {
+                                      fg: dimColor()
+                                    }, _$p));
+                                    return _el$25;
+                                  })() : null;
+                                })(), null);
                                 _$effect((_p$) => {
-                                  var _v$5 = mutedColor(), _v$6 = {
+                                  var _v$5 = {
                                     fg: winColor()
-                                  }, _v$7 = {
+                                  }, _v$6 = {
                                     fg: paceColor()
-                                  }, _v$8 = {
+                                  }, _v$7 = {
                                     fg: winColor()
                                   };
-                                  _v$5 !== _p$.e && (_p$.e = _$setProp(_el$13, "fg", _v$5, _p$.e));
-                                  _v$6 !== _p$.t && (_p$.t = _$setProp(_el$14, "style", _v$6, _p$.t));
-                                  _v$7 !== _p$.a && (_p$.a = _$setProp(_el$15, "style", _v$7, _p$.a));
-                                  _v$8 !== _p$.o && (_p$.o = _$setProp(_el$16, "style", _v$8, _p$.o));
+                                  _v$5 !== _p$.e && (_p$.e = _$setProp(_el$14, "style", _v$5, _p$.e));
+                                  _v$6 !== _p$.t && (_p$.t = _$setProp(_el$15, "style", _v$6, _p$.t));
+                                  _v$7 !== _p$.a && (_p$.a = _$setProp(_el$16, "style", _v$7, _p$.a));
                                   return _p$;
                                 }, {
                                   e: void 0,
                                   t: void 0,
-                                  a: void 0,
-                                  o: void 0
+                                  a: void 0
                                 });
                                 return _el$13;
                               }
@@ -4103,53 +4224,53 @@ function ProviderUsageBlocks(props) {
                           }
                           if (win.valueLabel) {
                             return (() => {
-                              var _el$25 = _$createElement("text"), _el$26 = _$createElement("span");
-                              _$insertNode(_el$25, _el$26);
-                              _$insert(_el$25, label, _el$26);
-                              _$insert(_el$26, () => truncateToWidth(win.valueLabel, Math.max(1, contentWidth() - visualWidth(label))));
+                              var _el$26 = _$createElement("text"), _el$27 = _$createElement("span");
+                              _$insertNode(_el$26, _el$27);
+                              _$insert(_el$26, label, _el$27);
+                              _$insert(_el$27, () => truncateToWidth(win.valueLabel, Math.max(1, contentWidth() - visualWidth(label))));
                               _$effect((_p$) => {
-                                var _v$12 = mutedColor(), _v$13 = {
+                                var _v$11 = mutedColor(), _v$12 = {
                                   fg: greenColor()
                                 };
-                                _v$12 !== _p$.e && (_p$.e = _$setProp(_el$25, "fg", _v$12, _p$.e));
-                                _v$13 !== _p$.t && (_p$.t = _$setProp(_el$26, "style", _v$13, _p$.t));
+                                _v$11 !== _p$.e && (_p$.e = _$setProp(_el$26, "fg", _v$11, _p$.e));
+                                _v$12 !== _p$.t && (_p$.t = _$setProp(_el$27, "style", _v$12, _p$.t));
                                 return _p$;
                               }, {
                                 e: void 0,
                                 t: void 0
                               });
-                              return _el$25;
+                              return _el$26;
                             })();
                           }
                           return (() => {
-                            var _el$27 = _$createElement("text"), _el$28 = _$createTextNode(`\u2014`);
-                            _$insertNode(_el$27, _el$28);
-                            _$insert(_el$27, label, _el$28);
-                            _$effect((_$p) => _$setProp(_el$27, "fg", mutedColor(), _$p));
-                            return _el$27;
+                            var _el$28 = _$createElement("text"), _el$29 = _$createTextNode(`\u2014`);
+                            _$insertNode(_el$28, _el$29);
+                            _$insert(_el$28, label, _el$29);
+                            _$effect((_$p) => _$setProp(_el$28, "fg", mutedColor(), _$p));
+                            return _el$28;
                           })();
                         }
                         if (droidGroup) {
                           return (() => {
-                            var _el$29 = _$createElement("box"), _el$32 = _$createElement("box");
-                            _$insertNode(_el$29, _el$32);
-                            _$setProp(_el$29, "flexDirection", "column");
-                            _$insert(_el$29, _$createComponent(Show, {
+                            var _el$30 = _$createElement("box"), _el$33 = _$createElement("box");
+                            _$insertNode(_el$30, _el$33);
+                            _$setProp(_el$30, "flexDirection", "column");
+                            _$insert(_el$30, _$createComponent(Show, {
                               get when() {
                                 return !state.result?.windows?.[index() - 1]?.label.startsWith(`${droidGroup[1]} \xB7 `);
                               },
                               get children() {
-                                var _el$30 = _$createElement("text"), _el$31 = _$createTextNode(`:`);
-                                _$insertNode(_el$30, _el$31);
-                                _$insert(_el$30, () => droidGroup[1], _el$31);
-                                _$effect((_$p) => _$setProp(_el$30, "fg", mutedColor(), _$p));
-                                return _el$30;
+                                var _el$31 = _$createElement("text"), _el$32 = _$createTextNode(`:`);
+                                _$insertNode(_el$31, _el$32);
+                                _$insert(_el$31, () => droidGroup[1], _el$32);
+                                _$effect((_$p) => _$setProp(_el$31, "fg", mutedColor(), _$p));
+                                return _el$31;
                               }
-                            }), _el$32);
-                            _$setProp(_el$32, "flexDirection", "column");
-                            _$setProp(_el$32, "paddingLeft", 1);
-                            _$insert(_el$32, renderWindow);
-                            return _el$29;
+                            }), _el$33);
+                            _$setProp(_el$33, "flexDirection", "column");
+                            _$setProp(_el$33, "paddingLeft", 1);
+                            _$insert(_el$33, renderWindow);
+                            return _el$30;
                           })();
                         }
                         return renderWindow();
@@ -8787,6 +8908,10 @@ async function showSettingsDialog(context) {
       title: `${cfg.showTrend ? "\u2713 " : "  "}${t("showTrend")}`,
       value: "showTrend",
       description: t("descShowTrend")
+    }, {
+      title: `${cfg.showPace ? "\u2713 " : "  "}${t("showPace")}`,
+      value: "showPace",
+      description: t("descShowPace")
     }, {
       title: `${t("settingsDisplayMode")}: ${displayLabel} \u25B8`,
       value: "providerUsageDisplay",

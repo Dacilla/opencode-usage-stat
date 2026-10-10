@@ -23,6 +23,7 @@ const external = [
 const files = [
   "test/provider-usage.test.ts",
     "test/provider-display.test.ts",
+  "test/dist-bar.test.ts",
    "test/droid-usage.test.ts",
    "test/factory-keyring.test.ts",
   "test/formatter.test.ts",

@@ -267,6 +267,7 @@ async function showSettingsDialog(context: Context): Promise<void> {
       { title: `${cfg.showPerformance ? "✓ " : "  "}${t("showPerformance")}`, value: "showPerformance", description: t("descShowPerformance") },
       { title: `${cfg.showPricing ? "✓ " : "  "}${t("showPricing")}`, value: "showPricing", description: t("descShowPricing") },
       { title: `${cfg.showTrend ? "✓ " : "  "}${t("showTrend")}`, value: "showTrend", description: t("descShowTrend") },
+      { title: `${cfg.showPace ? "✓ " : "  "}${t("showPace")}`, value: "showPace", description: t("descShowPace") },
       { title: `${t("settingsDisplayMode")}: ${displayLabel} ▸`, value: "providerUsageDisplay", description: t("descSettingsDisplay") },
       { title: `${t("settingsLanguage")} ▸`, value: "language", description: t("descSettingsLanguage") },
       { title: t("done"), value: "done", description: t("closeSettings") },

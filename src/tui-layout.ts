@@ -138,6 +138,28 @@ export function percentBar(percent: number, width: number): string {
   return "█".repeat(filled) + "░".repeat(Math.max(0, width - filled))
 }
 
+/** One-eighth block glyphs; index = eighths of the cell filled. Index 0 is unused. */
+const EIGHTH_BLOCKS = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉"]
+
+/**
+ * Bar with eighth-block resolution: the head cell renders a partial glyph
+ * instead of flooring to whole cells, so a 12-cell bar expresses 96 steps.
+ * Same clamping/width contract as percentBar, so it drops into splitBar and
+ * the pace-marker index space unchanged.
+ */
+export function percentBarSmooth(percent: number, width: number): string {
+  const p = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0
+  const w = Math.max(0, Math.floor(width))
+  if (w === 0) return ""
+  const cells = (p / 100) * w
+  const full = Math.min(w, Math.floor(cells))
+  const eighths = Math.round((cells - full) * 8)
+  if (eighths >= 8) return "█".repeat(Math.min(w, full + 1)) + "░".repeat(Math.max(0, w - full - 1))
+  const head = eighths > 0 && full < w ? EIGHTH_BLOCKS[eighths] : ""
+  const empty = Math.max(0, w - full - (head ? 1 : 0))
+  return "█".repeat(full) + head + "░".repeat(empty)
+}
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.floor(value)))
 }

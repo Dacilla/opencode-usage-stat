@@ -20,6 +20,8 @@ export interface UsageStatSettings {
   showPerformance: boolean
   showPricing: boolean
   showTrend: boolean
+  /** Whether provider usage rows show the pace-marker percentage (`│43%`). */
+  showPace: boolean
   /** Whether provider usage percentages show used or remaining quota. */
   providerUsageDisplay: UsageDisplayMode
   language: LanguageSetting
@@ -32,11 +34,15 @@ export const DEFAULT_SETTINGS: UsageStatSettings = {
   showPerformance: true,
   showPricing: true,
   showTrend: true,
+  // Off by default: at ~31 usable row cells an inline readout makes the reset
+  // wrap at a different point per row (Monthly's label is longest), which
+  // renders ragged. The pace % is on hover instead; enable in /usage to try it.
+  showPace: false,
   providerUsageDisplay: "used",
   language: "auto",
 }
 
-/** Seed values from plugin options (`sidebar.*`, `language`, `providerUsageDisplay`). */
+/** Seed values from plugin options (`sidebar.*`, `showPace`, `language`, `providerUsageDisplay`). */
 export function optionsToSettings(options: unknown): Partial<UsageStatSettings> {
   const out: Partial<UsageStatSettings> = {}
   try {
@@ -46,6 +52,7 @@ export function optionsToSettings(options: unknown): Partial<UsageStatSettings> 
       if (typeof cfg.sidebar.showPricing === "boolean") out.showPricing = cfg.sidebar.showPricing
       if (typeof cfg.sidebar.showTrend === "boolean") out.showTrend = cfg.sidebar.showTrend
     }
+    if (typeof cfg?.showPace === "boolean") out.showPace = cfg.showPace
     if (cfg?.language === "zh" || cfg?.language === "en" || cfg?.language === "auto") out.language = cfg.language
     if (cfg?.providerUsageDisplay === "used" || cfg?.providerUsageDisplay === "remaining") {
       out.providerUsageDisplay = cfg.providerUsageDisplay
@@ -80,7 +87,7 @@ export async function migrateLegacySettings(context: Context): Promise<void> {
     const [settings, mutate] = getSettingsStore(context)
     const [legacy] = context.storage.store<Partial<UsageStatSettings>>(LEGACY_KEY, { initial: {} })
     const patch: Partial<UsageStatSettings> = {}
-    for (const key of ["showPerformance", "showPricing", "showTrend", "providerUsageDisplay", "language"] as const) {
+    for (const key of ["showPerformance", "showPricing", "showTrend", "showPace", "providerUsageDisplay", "language"] as const) {
       const value = legacy?.[key]
       if (value !== undefined && value !== null && settings[key] !== value &&
         settings[key] === DEFAULT_SETTINGS[key]) {

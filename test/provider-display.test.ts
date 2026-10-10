@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { formatResetDuration } from "../src/formatter.js"
+import { formatResetDuration, formatDurationSpan } from "../src/formatter.js"
 import {
   parseCodexUsage,
   collapsedSummary,
@@ -64,4 +64,22 @@ test("collapsed summaries handle zero, full, balance-only, and absent quotas", (
   assert.equal(collapsedSummary([win], "remaining"), "100.0%/5h")
   assert.equal(collapsedSummary([{ ...win, percent: null, valueLabel: "$1.50" }], "used"), "$1.50")
   assert.equal(collapsedSummary([], "used"), null)
+})
+
+test("formatResetDuration caps composite units for tight rows", () => {
+  const long = resetIn(25 * 86400 + 3 * 3600 + 12 * 60)
+  assert.equal(formatResetDuration(long, now), "25d 3h 12m")
+  assert.equal(formatResetDuration(long, now, 2), "25d 3h")
+  // Short windows are unaffected: their composite is already <= 2 units.
+  assert.equal(formatResetDuration(resetIn(3 * 3600 + 12 * 60), now, 2), "3h 12m")
+  assert.equal(formatResetDuration(resetIn(59), now, 2), "59s")
+})
+
+test("formatDurationSpan formats elapsed/total window spans", () => {
+  assert.equal(formatDurationSpan(0), "now")
+  assert.equal(formatDurationSpan(-5), "now")
+  assert.equal(formatDurationSpan(45 * 1000), "45s")
+  assert.equal(formatDurationSpan(25 * 86400e3 + 3 * 3600e3 + 12 * 60e3), "25d 3h 12m")
+  assert.equal(formatDurationSpan(25 * 86400e3 + 3 * 3600e3 + 12 * 60e3, 2), "25d 3h")
+  assert.equal(formatDurationSpan(3 * 3600e3 + 20 * 60e3, 2), "3h 20m")
 })

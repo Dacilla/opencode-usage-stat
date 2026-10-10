@@ -33,6 +33,7 @@ import {
   toNumber,
   paceMarkerIndex,
   isOverPace,
+  windowPacePercent,
 } from "./provider-usage.js"
 import type { ProviderId, ProviderUsageResult, UsageDisplayMode } from "./provider-usage.js"
 import {
@@ -44,16 +45,68 @@ import {
 } from "./droid-usage.js"
 import type { DroidUsageQuery } from "./droid-usage.js"
 import { t } from "./i18n.js"
-import { formatResetDuration } from "./formatter.js"
+import { formatResetDuration, formatDurationSpan } from "./formatter.js"
 import { resolveThemeColors } from "./theme-map.js"
 import { getSettingsStore } from "./settings.js"
 import { truncateToWidth, visualWidth } from "./text-width.js"
-import { percentBar, providerHeaderFit, usageLevel } from "./tui-layout.js"
+import { percentBarSmooth, providerHeaderFit, usageLevel } from "./tui-layout.js"
 import type { UsageLevel } from "./tui-layout.js"
 
 const REFRESH_MS = 2 * 60 * 1000 // every 2 minutes
 // Update countdowns and pace markers locally; never poll provider APIs on ticks.
 const TICK_MS = 1000
+
+/** Bar glide duration on data refresh. */
+const TWEEN_MS = 260
+
+/**
+ * Per-provider smooth-percent store: rows read `get(label)` (falling back to
+ * the raw percent) and bars glide to refreshed values instead of jumping.
+ * One shared 60fps interval eases every pending entry (easeOutCubic) and stops
+ * itself once settled, so idle panels cost nothing.
+ */
+function createSmoothPercents(): {
+  get: (label: string) => number | undefined
+  set: (label: string, target: number) => void
+  stop: () => void
+} {
+  const [values, setValues] = createSignal<Record<string, number>>({})
+  const pending = new Map<string, { from: number; target: number; start: number }>()
+  let timer: ReturnType<typeof setInterval> | null = null
+  const tick = () => {
+    const now = Date.now()
+    const out: Record<string, number> = {}
+    let running = false
+    for (const [label, m] of pending) {
+      const t = Math.min(1, (now - m.start) / TWEEN_MS)
+      const eased = 1 - Math.pow(1 - t, 3) // easeOutCubic
+      out[label] = t >= 1 ? m.target : m.from + (m.target - m.from) * eased
+      if (t < 1) running = true
+    }
+    setValues(out)
+    if (!running && timer) {
+      clearInterval(timer)
+      timer = null
+    }
+  }
+  return {
+    get: label => values()[label],
+    set: (label, target) => {
+      const prev = pending.get(label)
+      const from = prev ? values()[label] ?? target : target
+      pending.set(label, { from, target, start: Date.now() })
+      if (!timer) timer = setInterval(tick, 16)
+      tick()
+    },
+    stop: () => {
+      pending.clear()
+      if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
+    },
+  }
+}
 
 /** Bar width in cells (also the pace-marker coordinate space). */
 const BAR_WIDTH = 12
@@ -61,7 +114,9 @@ const BAR_WIDTH = 12
 /** Split a bar into [before, marker, after] so the pace line can be colored. */
 function splitBar(bar: string, markerIndex: number | null): [string, string, string] {
   if (markerIndex == null) return [bar, "", ""]
-  return [bar.slice(0, markerIndex), "│", bar.slice(markerIndex + 1)]
+  // The marker cell replaces the bar glyph with a solid block painted in the
+  // pace color (red past budget, green within) — more visible than a thin rule.
+  return [bar.slice(0, markerIndex), "█", bar.slice(markerIndex + 1)]
 }
 
 const PROVIDER_NAMES: Record<string, string> = Object.fromEntries(
@@ -139,14 +194,15 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
   }
   const [localCollapse, setLocalCollapse] = createSignal<Record<string, boolean>>({})
 
-  // ── Shared settings store: used vs remaining display mode ──
-  let settingsStore: { readonly providerUsageDisplay?: UsageDisplayMode } | null = null
+  // ── Shared settings store: display mode + pace readout toggle ──
+  let settingsStore: { readonly providerUsageDisplay?: UsageDisplayMode; readonly showPace?: boolean } | null = null
   try {
     const [store] = getSettingsStore(context)
     settingsStore = store
   } catch { /* fall back to defaults */ }
   const displayMode = (): UsageDisplayMode =>
     settingsStore?.providerUsageDisplay === "remaining" ? "remaining" : "used"
+  const showPace = (): boolean => settingsStore?.showPace !== false
 
   const isCollapsed = (id: ProviderId): boolean => {
     const override = localCollapse()[id]
@@ -417,6 +473,15 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
             return status.startsWith(prefix) ? status.slice(prefix.length) : status
           }
           const header = () => providerHeaderFit(panelWidth() - HEADER_INSET, PROVIDER_NAMES[state.id] ?? state.id, headerText())
+          // Smooth bar transitions: glide displayed percents toward refreshed
+          // values (one shared interval, self-stopping when settled).
+          const smooth = createSmoothPercents()
+          createEffect(() => {
+            for (const w of state.result?.windows ?? []) {
+              if (w.percent != null) smooth.set(w.label, w.percent)
+            }
+          })
+          onCleanup(() => smooth.stop())
           return (
             <box flexDirection="column">
               <box flexDirection="row" justifyContent="space-between" gap={1} onMouseDown={() => toggle(state.id)} paddingX={0}>
@@ -461,23 +526,51 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
                         // Each bar is colored by its own used percent; the
                         // header dot keeps the worst window.
                         const winColor = () => levelColor(usageLevel(win.percent))
-                        // On-pace budget marker (│) at the elapsed fraction of
+                        // On-pace budget marker at the elapsed fraction of
                         // the window: red past the budget, green within it.
                         const markerIndex = () => paceMarkerIndex(win, displayMode(), BAR_WIDTH, nowMs())
                         const paceColor = () => (isOverPace(win, nowMs()) ? redColor() : greenColor())
+                        // Pace share as displayed: elapsed % in used mode, the
+                        // time-left-at-pace in remaining mode. Null without bounds.
+                        const paceShown = () => {
+                          const pace = windowPacePercent(win, nowMs())
+                          return pace == null ? null : (displayMode() === "remaining" ? 100 - pace : pace)
+                        }
+                        // Hover swaps the reset suffix for elapsed/total detail.
+                        const [hover, setHover] = createSignal(false)
+                        const rowMouse = {
+                          onMouseOver: () => setHover(true),
+                          onMouseOut: () => setHover(false),
+                        }
 
                         function renderWindow(): JSX.Element {
                           if (win.percent != null) {
-                            const shownPercent = () =>
-                              displayMode() === "remaining" ? 100 - win.percent! : win.percent!
+                            const shownPercent = () => {
+                              const smoothed = smooth.get(win.label)
+                              const pct = smoothed != null ? smoothed : win.percent!
+                              return displayMode() === "remaining" ? 100 - pct : pct
+                            }
                             const percentSuffix = () =>
                               ` ${shownPercent().toFixed(1)}%${displayMode() === "remaining" ? ` ${t("left")}` : ""}`
-                            const bar = () => splitBar(percentBar(shownPercent(), BAR_WIDTH), markerIndex())
-                            // Live countdown: re-renders on the 1s clock tick.
-                            // Always rendered (pre-merge behavior): the width-
-                            // budgeted layout dropped it first on Monthly, whose
-                            // label and reset are the longest.
-                            const resetText = () => win.resetsAt ? formatResetDuration(win.resetsAt, nowMs()) : ""
+                            // Eighth-block bar: partial head cell, so 12 cells
+                            // express 96 steps and refreshed values glide.
+                            const bar = () => splitBar(percentBarSmooth(shownPercent(), BAR_WIDTH), markerIndex())
+                            // Live countdown on the 1s clock tick. Always rendered
+                            // (pre-merge behavior): the width-budgeted layout
+                            // dropped it first on Monthly, whose label and reset
+                            // are the longest. "↻" replaces the translated word
+                            // (saves ~8 cells; locale-neutral; 2-unit duration).
+                            const resetText = () => win.resetsAt ? formatResetDuration(win.resetsAt, nowMs(), 2) : ""
+                            // Hover swaps the reset suffix for the full pace
+                            // story: marker % + elapsed/total window span.
+                            const hoverText = () => {
+                              if (!win.startsAt || !win.resetsAt) return ""
+                              const start = Date.parse(win.startsAt)
+                              const end = Date.parse(win.resetsAt)
+                              const pace = paceShown()
+                              const pacePart = pace != null ? `│${Math.round(pace)}% · ` : ""
+                              return ` · ${pacePart}${formatDurationSpan(nowMs() - start, 2)} / ${formatDurationSpan(end - start, 2)} elapsed`
+                            }
                             // Dollar pools render "Monthly: [bar] N% left" plus
                             // a second line "[credits]$/[allowance]$"; other
                             // windows keep " · resets <duration>".
@@ -503,14 +596,17 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
                                   </text>
                                 </box>
                               }>
-                                <text fg={mutedColor()}>
+                                <text fg={mutedColor()} {...rowMouse}>
                                   {label}
                                   <span style={{ fg: winColor() } as any}>{bar()[0]}</span>
                                   <span style={{ fg: paceColor() } as any}>{bar()[1]}</span>
                                   <span style={{ fg: winColor() } as any}>{bar()[2]}{percentSuffix()}</span>
+                                  {showPace() && paceShown() != null ? (
+                                    <span style={{ fg: dimColor() } as any}>{` │${Math.round(paceShown()!)}%`}</span>
+                                  ) : null}
                                   {win.resetsAt ? (
                                     <span style={{ fg: dimColor() } as any}>
-                                      {` · ${t("providerResets")} ${resetText()}`}
+                                      {hover() ? hoverText() : ` ↻ ${resetText()}`}
                                     </span>
                                   ) : null}
                                 </text>

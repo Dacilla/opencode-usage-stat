@@ -1919,11 +1919,11 @@ function summarize(name: string, windows: UsageWindow[]): string {
   const first = windows[0]
   if (!first) return `${name} — no data`
   if (first.valueLabel) {
-    if (first.resetsAt) return `${name} — ${first.valueLabel} · resets ${formatResetDuration(first.resetsAt)}`
+    if (first.resetsAt) return `${name} — ${first.valueLabel} ↻ ${formatResetDuration(first.resetsAt, Date.now(), 2)}`
     return `${name} — ${first.valueLabel}`
   }
   if (first.percent != null) {
-    const suffix = first.resetsAt ? ` · resets ${formatResetDuration(first.resetsAt)}` : ""
+    const suffix = first.resetsAt ? ` ↻ ${formatResetDuration(first.resetsAt, Date.now(), 2)}` : ""
     return `${name} — ${first.percent.toFixed(0)}%${suffix}`
   }
   return name

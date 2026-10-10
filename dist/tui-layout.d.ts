@@ -56,4 +56,11 @@ export type UsageLevel = "ok" | "warn" | "critical";
 /** Color level from the *used* percent, regardless of display mode. */
 export declare function usageLevel(usedPercent: number | null | undefined): UsageLevel;
 export declare function percentBar(percent: number, width: number): string;
+/**
+ * Bar with eighth-block resolution: the head cell renders a partial glyph
+ * instead of flooring to whole cells, so a 12-cell bar expresses 96 steps.
+ * Same clamping/width contract as percentBar, so it drops into splitBar and
+ * the pace-marker index space unchanged.
+ */
+export declare function percentBarSmooth(percent: number, width: number): string;
 export declare function clamp(value: number, min: number, max: number): number;

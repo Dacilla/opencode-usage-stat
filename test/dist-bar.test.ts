@@ -7,6 +7,7 @@ import {
   providerHeaderFit,
   usageLevel,
   percentBar,
+  percentBarSmooth,
   DIST_BAR_MIN,
   PROVIDER_BAR_MIN,
   PROVIDER_BAR_MAX,
@@ -148,4 +149,29 @@ test("percentBar fills proportionally", () => {
   assert.equal(percentBar(100, 4), "████")
   assert.equal(percentBar(150, 4), "████")
   assert.equal(percentBar(-5, 4), "░░░░")
+})
+
+test("percentBarSmooth renders an eighth-block head cell", () => {
+  // 50% of 12 cells = 6.0 exactly -> no head glyph, same as percentBar.
+  assert.equal(percentBarSmooth(50, 12), percentBar(50, 12))
+  // 4.5% of 12 = 0.54 cells -> 4/8 eighths: a half-cell head.
+  assert.equal(percentBarSmooth(4.5, 12), "\u258c" + "\u2591".repeat(11))
+  // 8.75% of 12 = 1.05 cells -> 0.4 eighths rounds to 0: plain full cell.
+  assert.equal(percentBarSmooth(8.75, 12), "\u2588" + "\u2591".repeat(11))
+  // 12.5% of 12 = 1.5 cells -> one full + half.
+  assert.equal(percentBarSmooth(12.5, 12), "\u2588\u258c" + "\u2591".repeat(10))
+  // 96% of 12 = 11.52 -> 11 full + ~4 eighths (rounds up to a partial head).
+  assert.equal(percentBarSmooth(96, 12), "\u2588".repeat(11) + "\u258c")
+  // Rounding to a full cell must not overflow the width.
+  assert.equal(percentBarSmooth(99.9, 12), "\u2588".repeat(12))
+  assert.equal(percentBarSmooth(100, 12), "\u2588".repeat(12))
+})
+
+test("percentBarSmooth clamps and keeps the width invariant", () => {
+  for (const pct of [-5, 0, 3.3, 12.5, 50, 87.6, 100, 150]) {
+    const bar = percentBarSmooth(pct, 12)
+    assert.equal(bar.length, 12, `width for ${pct}%`)
+    assert.ok(/^[\u2588\u2589\u258a\u258b\u258c\u258d\u258e\u258f\u2591]*$/.test(bar), `glyphs for ${pct}%`)
+  }
+  assert.equal(percentBarSmooth(50, 0), "")
 })

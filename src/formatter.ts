@@ -278,8 +278,11 @@ export function formatDuration(ms: number | null): string {
  * Relative time until an ISO reset timestamp ("now"/"45s"/"5m"/"3h 12m"/"2d 3h 12m").
  * Single shared implementation (previously duplicated with diverging behavior
  * in provider-usage.ts and provider-usage-blocks.tsx).
+ *
+ * `maxUnits` (0 = all) caps the composite for tight rows: the TUI renders
+ * "25d 3h" instead of "25d 3h 12m" — months-long windows do not need minutes.
  */
-export function formatResetDuration(iso: string, nowMs: number = Date.now()): string {
+export function formatResetDuration(iso: string, nowMs: number = Date.now(), maxUnits = 0): string {
   const d = new Date(iso)
   if (!Number.isFinite(d.getTime())) return iso
   const diff = d.getTime() - nowMs
@@ -294,7 +297,26 @@ export function formatResetDuration(iso: string, nowMs: number = Date.now()): st
   if (days > 0) parts.push(`${days}d`)
   if (hours > 0) parts.push(`${hours}h`)
   if (mins > 0) parts.push(`${mins}m`)
-  return parts.join(" ")
+  return (maxUnits > 0 ? parts.slice(0, maxUnits) : parts).join(" ")
+}
+
+/**
+ * Composite duration for a millisecond span ("25d 3h", "3h 20m", "45s") —
+ * the elapsed/total pair shown when hovering a usage row. `maxUnits` caps
+ * the composite like formatResetDuration.
+ */
+export function formatDurationSpan(ms: number, maxUnits = 0): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "now"
+  if (ms < 60_000) return `${Math.max(1, Math.round(ms / 1000))}s`
+  const minutes = Math.floor(ms / 60_000)
+  const days = Math.floor(minutes / 1440)
+  const hours = Math.floor((minutes % 1440) / 60)
+  const mins = minutes % 60
+  const parts: string[] = []
+  if (days > 0) parts.push(`${days}d`)
+  if (hours > 0) parts.push(`${hours}h`)
+  if (mins > 0) parts.push(`${mins}m`)
+  return (maxUnits > 0 ? parts.slice(0, maxUnits) : parts).join(" ")
 }
 
 /** Linear-interpolation percentile over a sorted-ascending array. */

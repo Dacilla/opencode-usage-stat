@@ -299,8 +299,17 @@ export declare function formatDuration(ms: number | null): string;
  * Relative time until an ISO reset timestamp ("now"/"45s"/"5m"/"3h 12m"/"2d 3h 12m").
  * Single shared implementation (previously duplicated with diverging behavior
  * in provider-usage.ts and provider-usage-blocks.tsx).
+ *
+ * `maxUnits` (0 = all) caps the composite for tight rows: the TUI renders
+ * "25d 3h" instead of "25d 3h 12m" — months-long windows do not need minutes.
  */
-export declare function formatResetDuration(iso: string, nowMs?: number): string;
+export declare function formatResetDuration(iso: string, nowMs?: number, maxUnits?: number): string;
+/**
+ * Composite duration for a millisecond span ("25d 3h", "3h 20m", "45s") —
+ * the elapsed/total pair shown when hovering a usage row. `maxUnits` caps
+ * the composite like formatResetDuration.
+ */
+export declare function formatDurationSpan(ms: number, maxUnits?: number): string;
 /** Linear-interpolation percentile over a sorted-ascending array. */
 export declare function percentileSorted(sortedAsc: number[], p: number): number;
 /**

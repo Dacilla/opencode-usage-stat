@@ -82,6 +82,24 @@ export function distBarWidth(contentWidth: number, prefixWidth: number, suffix: 
 export const PROVIDER_BAR_MIN = 5
 export const PROVIDER_BAR_MAX = 20
 
+/** Line-1 suffix budgets (worst case) so per-provider bar widths stay stable
+ * as numbers change: " 100.0%", " 100.0% left", " │100%". */
+export const PROVIDER_SUFFIX_USED = 7
+export const PROVIDER_SUFFIX_REMAINING = 12
+export const PROVIDER_SUFFIX_PACE = 6
+
+/**
+ * Widest bar that fits `label + bar + suffix` into `contentWidth` cells —
+ * same for every row of a provider, so bars stay comparable where comparison
+ * matters, and as wide as the budget allows (granularity comes from width,
+ * since cells are atomic). Clamped to PROVIDER_BAR_MIN..MAX; below the min
+ * the caller still renders (wrapMode="none" clips the tail rather than
+ * wrapping mid-row).
+ */
+export function providerBarWidth(contentWidth: number, gutterWidth: number, suffixBudget: number): number {
+  return clamp(contentWidth - gutterWidth - suffixBudget, PROVIDER_BAR_MIN, PROVIDER_BAR_MAX)
+}
+
 export interface ProviderRowLayout {
   barWidth: number
   /** Reset suffix to render (may be shortened or "" to make the row fit). */
@@ -162,4 +180,54 @@ export function percentBarSmooth(percent: number, width: number): string {
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.floor(value)))
+}
+
+// ── Provider quota bar (solid two-tone strip) ──
+
+export type BarPartKind = "filled" | "empty" | "marker"
+export interface BarPart { text: string; kind: BarPartKind }
+
+/**
+ * Solid quota bar, whole cells only: every cell paints a full block, so the
+ * bar can never show terminal background — no dotted tracks, no partial-head
+ * slivers, no exceptions. Fill level is whole-cell floor (the classic
+ * progress-bar convention); the exact value always rides alongside in the
+ * percent label, and the pace position is a thin │ tick whose cell padding
+ * reads as a notch in every color state.
+ *
+ * Why no eighth-block heads: a partial glyph is paint + background by
+ * definition, and those background fractions are precisely the intermittent
+ * "blank gaps" (a ▎ head is 75% background). Sub-cell precision and
+ * zero-background cells are mutually exclusive in a cell renderer — so
+ * precision comes from bar *width* (see providerBarWidth), not fragments.
+ */
+export function solidBar(percent: number, width: number, markerIndex: number | null): BarPart[] {
+  const p = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0
+  const w = Math.max(0, Math.floor(width))
+  if (w === 0) return []
+  const filledCells = Math.min(w, Math.floor((p / 100) * w))
+  const glyphAt = (i: number): string => {
+    if (markerIndex != null && i === markerIndex) return "│"
+    return "█"
+  }
+  const kindAt = (i: number): BarPartKind => {
+    if (markerIndex != null && i === markerIndex) return "marker"
+    return i < filledCells ? "filled" : "empty"
+  }
+  const out: BarPart[] = []
+  let cur = ""
+  let curKind: BarPartKind | null = null
+  for (let i = 0; i < w; i++) {
+    const k = kindAt(i)
+    const g = glyphAt(i)
+    if (k === curKind) {
+      cur += g
+    } else {
+      if (curKind != null) out.push({ text: cur, kind: curKind })
+      cur = g
+      curKind = k
+    }
+  }
+  if (curKind != null) out.push({ text: cur, kind: curKind })
+  return out
 }

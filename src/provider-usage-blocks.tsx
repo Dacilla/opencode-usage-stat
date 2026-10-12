@@ -10,6 +10,13 @@
  * independently every two minutes with a ~15s timeout.
  * Errors / unconfigured states never leak secrets.
  *
+ * Row geometry is fixed per provider, not fitted per row: every window label
+ * in a provider pads to one gutter so all bars start in the same column and
+ * share one width — the widest the budget allows, since cells are atomic and
+ * width is granularity. The reset countdown lives on its own dim second
+ * line, aligned under the bar start, so rows wrap at one designed break
+ * point instead of splitting bars mid-row at a different point each.
+ *
  * V2 API: Context from @opencode-ai/plugin/tui.
  */
 import { createSignal, createEffect, createMemo, onCleanup, For, Show } from "solid-js"
@@ -45,11 +52,11 @@ import {
 } from "./droid-usage.js"
 import type { DroidUsageQuery } from "./droid-usage.js"
 import { t } from "./i18n.js"
-import { formatResetDuration, formatDurationSpan } from "./formatter.js"
+import { formatResetDuration } from "./formatter.js"
 import { resolveThemeColors } from "./theme-map.js"
-import { getSettingsStore } from "./settings.js"
-import { truncateToWidth, visualWidth } from "./text-width.js"
-import { percentBarSmooth, providerHeaderFit, usageLevel } from "./tui-layout.js"
+import { getSettingsStore, DEFAULT_SETTINGS, optionsToSettings } from "./settings.js"
+import { truncateToWidth, visualWidth, padEndToWidth } from "./text-width.js"
+import { providerHeaderFit, usageLevel, solidBar, providerBarWidth, PROVIDER_SUFFIX_USED, PROVIDER_SUFFIX_REMAINING, PROVIDER_SUFFIX_PACE } from "./tui-layout.js"
 import type { UsageLevel } from "./tui-layout.js"
 
 const REFRESH_MS = 2 * 60 * 1000 // every 2 minutes
@@ -106,17 +113,6 @@ function createSmoothPercents(): {
       }
     },
   }
-}
-
-/** Bar width in cells (also the pace-marker coordinate space). */
-const BAR_WIDTH = 12
-
-/** Split a bar into [before, marker, after] so the pace line can be colored. */
-function splitBar(bar: string, markerIndex: number | null): [string, string, string] {
-  if (markerIndex == null) return [bar, "", ""]
-  // The marker cell replaces the bar glyph with a solid block painted in the
-  // pace color (red past budget, green within) — more visible than a thin rule.
-  return [bar.slice(0, markerIndex), "█", bar.slice(markerIndex + 1)]
 }
 
 const PROVIDER_NAMES: Record<string, string> = Object.fromEntries(
@@ -200,9 +196,26 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
     const [store] = getSettingsStore(context)
     settingsStore = store
   } catch { /* fall back to defaults */ }
-  const displayMode = (): UsageDisplayMode =>
-    settingsStore?.providerUsageDisplay === "remaining" ? "remaining" : "used"
-  const showPace = (): boolean => settingsStore?.showPace !== false
+  const displayMode = (): UsageDisplayMode => {
+    const stored = settingsStore?.providerUsageDisplay
+    if (stored === "remaining" || stored === "used") return stored
+    try {
+      const fromOptions = optionsToSettings(context.options).providerUsageDisplay
+      if (fromOptions === "remaining" || fromOptions === "used") return fromOptions
+    } catch { /* defaults */ }
+    return DEFAULT_SETTINGS.providerUsageDisplay
+  }
+  // Pace readout toggle (see DEFAULT_SETTINGS). The readout sits on the bar
+  // line when enabled; the reset already has its own second line, so pace
+  // costs no wrap. It still defaults off — hover carries the same number.
+  const showPace = (): boolean => {
+    if (settingsStore?.showPace !== undefined) return settingsStore.showPace === true
+    try {
+      const fromOptions = optionsToSettings(context.options).showPace
+      if (typeof fromOptions === "boolean") return fromOptions
+    } catch { /* defaults */ }
+    return DEFAULT_SETTINGS.showPace
+  }
 
   const isCollapsed = (id: ProviderId): boolean => {
     const override = localCollapse()[id]
@@ -473,6 +486,32 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
             return status.startsWith(prefix) ? status.slice(prefix.length) : status
           }
           const header = () => providerHeaderFit(panelWidth() - HEADER_INSET, PROVIDER_NAMES[state.id] ?? state.id, headerText())
+          // Fixed-geometry gutter: every window label in this provider pads
+          // to the widest one, so all bars start in the same column.
+          const displayLabel = (raw: string): string => {
+            if (state.id === "droid") {
+              const g = /^(Standard|Core) · (5h|weekly|monthly)$/.exec(raw)
+              if (g) return g[2].charAt(0).toUpperCase() + g[2].slice(1)
+            }
+            return raw
+          }
+          const labelWidth = (): number => {
+            let m = 0
+            for (const w of state.result?.windows ?? []) m = Math.max(m, visualWidth(`${displayLabel(w.label)}: `))
+            return m
+          }
+          // Per-provider bar width: the widest bar that fits this provider's
+          // gutter + worst-case suffix at the narrowest row indent, shared by
+          // every row so bars compare directly, and as wide as the budget
+          // allows (cells are atomic, so width IS granularity). Droid group
+          // sub-rows indent one extra cell, hence the -1 when gated in.
+          const suffixBudget = (): number =>
+            (displayMode() === "remaining" ? PROVIDER_SUFFIX_REMAINING : PROVIDER_SUFFIX_USED) +
+            (showPace() ? PROVIDER_SUFFIX_PACE : 0)
+          const minContentWidth = (): number =>
+            panelWidth() - BODY_INSET - (state.id === "droid" ? 1 : 0)
+          const barWidth = (): number =>
+            providerBarWidth(minContentWidth(), labelWidth(), suffixBudget())
           // Smooth bar transitions: glide displayed percents toward refreshed
           // values (one shared interval, self-stopping when settled).
           const smooth = createSmoothPercents()
@@ -521,6 +560,7 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
                           : win.label
                         const isDollarPool = DOLLAR_POOL_LABEL.test(win.valueLabel ?? "")
                         const label = windowLabel ? windowLabel + ": " : ""
+                        const paddedLabel = () => padEndToWidth(label, labelWidth())
                         // Droid group rows sit one extra cell to the right.
                         const contentWidth = () => panelWidth() - BODY_INSET - (droidGroup ? 1 : 0)
                         // Each bar is colored by its own used percent; the
@@ -528,7 +568,6 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
                         const winColor = () => levelColor(usageLevel(win.percent))
                         // On-pace budget marker at the elapsed fraction of
                         // the window: red past the budget, green within it.
-                        const markerIndex = () => paceMarkerIndex(win, displayMode(), BAR_WIDTH, nowMs())
                         const paceColor = () => (isOverPace(win, nowMs()) ? redColor() : greenColor())
                         // Pace share as displayed: elapsed % in used mode, the
                         // time-left-at-pace in remaining mode. Null without bounds.
@@ -552,25 +591,52 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
                             }
                             const percentSuffix = () =>
                               ` ${shownPercent().toFixed(1)}%${displayMode() === "remaining" ? ` ${t("left")}` : ""}`
-                            // Eighth-block bar: partial head cell, so 12 cells
-                            // express 96 steps and refreshed values glide.
-                            const bar = () => splitBar(percentBarSmooth(shownPercent(), BAR_WIDTH), markerIndex())
-                            // Live countdown on the 1s clock tick. Always rendered
-                            // (pre-merge behavior): the width-budgeted layout
-                            // dropped it first on Monthly, whose label and reset
-                            // are the longest. "↻" replaces the translated word
-                            // (saves ~8 cells; locale-neutral; 2-unit duration).
+                            const paceSuffix = () =>
+                              showPace() && paceShown() != null ? ` │${Math.round(paceShown()!)}%` : ""
+                            // Bar geometry comes from the provider scope: one shared
+                            // width per provider (comparison) at the max the
+                            // budget allows (width is granularity). The pace
+                            // readout is budgeted in, so it always fits when
+                            // enabled; the reset already has its own line.
+                            const line1Pace = () => paceSuffix()
+                            // Live countdown on the 1s clock tick. "↻" replaces
+                            // the translated word (saves ~8 cells;
+                            // locale-neutral; 2-unit duration).
                             const resetText = () => win.resetsAt ? formatResetDuration(win.resetsAt, nowMs(), 2) : ""
-                            // Hover swaps the reset suffix for the full pace
-                            // story: marker % + elapsed/total window span.
+                            // Hover carries the pace number only: a quick checkable
+                            // readout that fits on any panel instead of a
+                            // verbose line that wraps mid-phrase.
                             const hoverText = () => {
-                              if (!win.startsAt || !win.resetsAt) return ""
-                              const start = Date.parse(win.startsAt)
-                              const end = Date.parse(win.resetsAt)
                               const pace = paceShown()
-                              const pacePart = pace != null ? `│${Math.round(pace)}% · ` : ""
-                              return ` · ${pacePart}${formatDurationSpan(nowMs() - start, 2)} / ${formatDurationSpan(end - start, 2)} elapsed`
+                              return pace != null ? `│${Math.round(pace)}%` : ""
                             }
+                            const markerIdx = () => paceMarkerIndex(win, displayMode(), barWidth(), nowMs())
+                            const parts = () => solidBar(shownPercent(), barWidth(), markerIdx())
+                            // Second line, aligned under the bar start: reset
+                            // countdown, or the pace number while hovered.
+                            // One designed break point — never ragged.
+                            const resetLine = () => {
+                              if (hover()) return hoverText() || (win.resetsAt ? `↻ ${resetText()}` : "")
+                              if (!win.resetsAt) return ""
+                              return truncateToWidth(`↻ ${resetText()}`, Math.max(0, contentWidth() - labelWidth()))
+                            }
+                            // Solid two-tone bar, Dist-style: used cells in the
+                            // window color, remaining cells dim — no dotted
+                            // track, no backgrounds. The thin │ tick reads as
+                            // a notch via its cell padding in every state.
+                            const renderBar = () => (
+                              <For each={parts()}>
+                                {part => (
+                                  <span
+                                    style={{
+                                      fg: part.kind === "filled" ? winColor() : part.kind === "marker" ? paceColor() : dimColor(),
+                                    } as any}
+                                  >
+                                    {part.text}
+                                  </span>
+                                )}
+                              </For>
+                            )
                             // Dollar pools render "Monthly: [bar] N% left" plus
                             // a second line "[credits]$/[allowance]$"; other
                             // windows keep " · resets <duration>".
@@ -583,47 +649,48 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
                             return (
                               <Show when={!isDollarPool} fallback={
                                 <box flexDirection="column">
-                                  <text fg={mutedColor()}>
-                                    {label}
-                                    <span style={{ fg: winColor() } as any}>{bar()[0]}</span>
-                                    <span style={{ fg: paceColor() } as any}>{bar()[1]}</span>
-                                    <span style={{ fg: winColor() } as any}>{bar()[2]}{percentSuffix()}</span>
+                                  <text fg={mutedColor()} wrapMode="none" {...rowMouse}>
+                                    {paddedLabel()}
+                                    {renderBar()}
+                                    <span style={{ fg: winColor() } as any}>{percentSuffix()}</span>
                                   </text>
-                                  <text>
+                                  <text fg={dimColor()} wrapMode="none">
+                                    {" ".repeat(labelWidth())}
                                     <span style={{ fg: winColor() } as any}>
-                                      {`${shortDollars(poolCredits ?? 0)}$/${shortDollars(poolAllowance ?? 0)}$`}
+                                      {truncateToWidth(`${shortDollars(poolCredits ?? 0)}$/${shortDollars(poolAllowance ?? 0)}$`, Math.max(1, contentWidth() - labelWidth()))}
                                     </span>
                                   </text>
                                 </box>
                               }>
-                                <text fg={mutedColor()} {...rowMouse}>
-                                  {label}
-                                  <span style={{ fg: winColor() } as any}>{bar()[0]}</span>
-                                  <span style={{ fg: paceColor() } as any}>{bar()[1]}</span>
-                                  <span style={{ fg: winColor() } as any}>{bar()[2]}{percentSuffix()}</span>
-                                  {showPace() && paceShown() != null ? (
-                                    <span style={{ fg: dimColor() } as any}>{` │${Math.round(paceShown()!)}%`}</span>
-                                  ) : null}
-                                  {win.resetsAt ? (
-                                    <span style={{ fg: dimColor() } as any}>
-                                      {hover() ? hoverText() : ` ↻ ${resetText()}`}
-                                    </span>
-                                  ) : null}
-                                </text>
+                                <box flexDirection="column">
+                                  <text fg={mutedColor()} wrapMode="none" {...rowMouse}>
+                                    {paddedLabel()}
+                                    {renderBar()}
+                                    <span style={{ fg: winColor() } as any}>{percentSuffix()}</span>
+                                    {line1Pace() ? (
+                                      <span style={{ fg: dimColor() } as any}>{line1Pace()}</span>
+                                    ) : null}
+                                  </text>
+                                  <Show when={resetLine()}>
+                                    <text fg={dimColor()} wrapMode="none" {...rowMouse}>
+                                      {" ".repeat(labelWidth())}{resetLine()}
+                                    </text>
+                                  </Show>
+                                </box>
                               </Show>
                             )
                           }
                           if (win.valueLabel) {
                             return (
                               <text fg={mutedColor()}>
-                                {label}
+                                {padEndToWidth(label, labelWidth())}
                                 <span style={{ fg: greenColor() } as any}>
-                                  {truncateToWidth(win.valueLabel, Math.max(1, contentWidth() - visualWidth(label)))}
+                                  {truncateToWidth(win.valueLabel, Math.max(1, contentWidth() - labelWidth()))}
                                 </span>
                               </text>
                             )
                           }
-                          return <text fg={mutedColor()}>{label}—</text>
+                          return <text fg={mutedColor()}>{padEndToWidth(label, labelWidth())}—</text>
                         }
 
                         if (droidGroup) {

@@ -5,14 +5,19 @@ import {
   distBarWidth,
   providerRowLayout,
   providerHeaderFit,
+  providerBarWidth,
+  PROVIDER_SUFFIX_USED,
+  PROVIDER_SUFFIX_REMAINING,
+  PROVIDER_SUFFIX_PACE,
   usageLevel,
   percentBar,
   percentBarSmooth,
+  solidBar,
   DIST_BAR_MIN,
   PROVIDER_BAR_MIN,
   PROVIDER_BAR_MAX,
 } from "../src/tui-layout.js"
-import { visualWidth } from "../src/text-width.js"
+import { visualWidth, padEndToWidth } from "../src/text-width.js"
 
 const sum = (s: { cache: number; input: number; output: number }) => s.cache + s.input + s.output
 
@@ -174,4 +179,88 @@ test("percentBarSmooth clamps and keeps the width invariant", () => {
     assert.ok(/^[\u2588\u2589\u258a\u258b\u258c\u258d\u258e\u258f\u2591]*$/.test(bar), `glyphs for ${pct}%`)
   }
   assert.equal(percentBarSmooth(50, 0), "")
+})
+
+test("opencode-go screenshot rows fit at the 38-column default without wrapping", () => {
+  // Regression for: Rolling/Weekly/Monthly wrapped at different points
+  // (fixed 12-cell bar + inline pace + always-reset = 39-42 cells in a 32-cell
+  // row), splitting bars across lines and hiding the pace line.
+  const width = PROVIDER_BODY(38)
+  const rows: Array<[string, string, string]> = [
+    ["Rolling: ", " 0.0%", " ↻ 4h 36m"],
+    ["Weekly: ", " 20.0%", " ↻ 1d 11h"],
+    ["Monthly: ", " 10.0%", " ↻ 25d 11h"],
+  ]
+  for (const [label, suffix, reset] of rows) {
+    const r = providerRowLayout(width, label, suffix, reset, "")
+    const line = visualWidth(label) + r.barWidth + visualWidth(suffix) + visualWidth(r.reset)
+    assert.ok(line <= width, `"${label}${suffix}${reset}" → ${line}/${width}`)
+    assert.equal(r.reset, reset, `${label} keeps its countdown at the default width`)
+  }
+})
+
+test("opencode-go rows with the pace readout still fit by dropping the reset", () => {
+  const width = PROVIDER_BODY(38)
+  for (const [label, suffix, pace, reset] of [
+    ["Rolling: ", " 0.0%", " │8%", " ↻ 4h 36m"],
+    ["Weekly: ", " 20.0%", " │79%", " ↻ 1d 11h"],
+    ["Monthly: ", " 10.0%", " │18%", " ↻ 25d 11h"],
+  ] as Array<[string, string, string, string]>) {
+    const r = providerRowLayout(width, label, suffix + pace, reset, "")
+    const line = visualWidth(label) + r.barWidth + visualWidth(suffix + pace) + visualWidth(r.reset)
+    assert.ok(line <= width, `"${label}${suffix}${pace}${reset}" → ${line}/${width}`)
+  }
+})
+
+test("provider gutter aligns bars; per-provider width is the max that fits", () => {
+  // Labels pad to one gutter ("Monthly: " is widest), so bars start aligned.
+  const gutter = Math.max(...["Rolling: ", "Weekly: ", "Monthly: "].map(l => visualWidth(l)))
+  assert.equal(gutter, 9)
+  for (const raw of ["Rolling: ", "Weekly: ", "Monthly: "]) {
+    assert.equal(visualWidth(padEndToWidth(raw, gutter)), gutter)
+  }
+  // OpenCode Go at the 38 default: 32 - 9 - 7 leaves 16 cells — finer than
+  // the old fixed 12, identical for every row of the provider.
+  assert.equal(providerBarWidth(PROVIDER_BODY(38), 9, PROVIDER_SUFFIX_USED), 16)
+  // Real 42 host panel caps at the 20-cell max (5% steps).
+  assert.equal(providerBarWidth(PROVIDER_BODY(42), 9, PROVIDER_SUFFIX_USED), PROVIDER_BAR_MAX)
+  // Remaining mode's longer suffix narrows the bar instead of wrapping it.
+  assert.equal(providerBarWidth(PROVIDER_BODY(38), 9, PROVIDER_SUFFIX_REMAINING), 11)
+  // Pace readout budgeted the same way.
+  assert.equal(providerBarWidth(PROVIDER_BODY(38), 9, PROVIDER_SUFFIX_USED + PROVIDER_SUFFIX_PACE), 10)
+  // Pathological narrowness floors at the min rather than going negative.
+  assert.equal(providerBarWidth(20, 15, PROVIDER_SUFFIX_REMAINING), PROVIDER_BAR_MIN)
+  // Line 1 fits by construction wherever the bar isn't floored.
+  for (const [panel, g, suffix] of [[38, 9, 7], [42, 9, 7], [38, 9, 12], [42, 15, 12], [38, 9, 13]] as Array<[number, number, number]>) {
+    const w = providerBarWidth(PROVIDER_BODY(panel), g, suffix)
+    if (w > PROVIDER_BAR_MIN) {
+      assert.ok(g + w + suffix <= PROVIDER_BODY(panel), `panel=${panel} gutter=${g} suffix=${suffix} bar=${w}`)
+    }
+  }
+  // Second line (gutter indent + longest reset) always fits.
+  assert.ok(gutter + visualWidth("↻ 25d 11h") <= PROVIDER_BODY(38))
+})
+
+test("solidBar paints whole cells only: no background-showing glyphs", () => {
+  // 0% bar with a pace marker at 0: marker run exists with no fill.
+  const empty = solidBar(0, 9, 0)
+  assert.deepEqual(empty.map(p => p.kind), ["marker", "empty"])
+  assert.equal(empty[0].text, "│")
+  // Fill floors to whole cells: 20% of 9 = 1.8 → 1 filled cell, then solid
+  // remainder, marker, tail.
+  const parts = solidBar(20, 9, 7)
+  assert.deepEqual(parts.map(p => p.kind), ["filled", "empty", "marker", "empty"])
+  assert.equal(parts[0].text, "█")
+  // Sweep: only █ and │ appear at any percent, width, or marker — never a
+  // partial, dotted, or blank-showing glyph.
+  for (let pct = 0; pct <= 100; pct += 2.5) {
+    for (const w of [5, 9, 12, 16, 20]) {
+      for (const m of [null, 0, 5, 11, 19]) {
+        const glyphs = solidBar(pct, w, m as number | null).map(p => p.text).join("")
+        assert.ok(/^[█│]*$/.test(glyphs), `solid glyphs only at ${pct}%/${w}/m=${m}`)
+        assert.equal(visualWidth(glyphs), w)
+      }
+    }
+  }
+  assert.deepEqual(solidBar(50, 0, null), [])
 })

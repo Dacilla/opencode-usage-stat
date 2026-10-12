@@ -141,7 +141,7 @@ Only providers set to `true` are queried. The plugin reads credentials **at runt
 |---|---|---|
 | `opencode-go` | OpenCode Go | API key |
 | `deepseek` | DeepSeek | API key |
-| `codex` | Codex / ChatGPT | OAuth access token (+ optional account id) |
+| `codex` | Codex / ChatGPT | OpenCode OAuth token, falling back to the Codex CLI OAuth token (`~/.codex/auth.json`, honors `CODEX_HOME`) |
 | `claude` | Claude Pro/Max | Claude Code OAuth access token (auth.json) |
 | `kimi-for-coding` | Kimi for Coding | API key |
 | `zai-coding-plan` | z.ai Coding Plan | API key |
@@ -183,6 +183,7 @@ Resolution order (per provider):
    - OpenRouter: `OPENROUTER_API_KEY`
    - Command Code: `COMMAND_CODE_API_KEY` or `COMMANDCODE_API_KEY`
 4. **Provider CLI auth files**:
+   - Codex: `~/.codex/auth.json` (`{"tokens": {"access_token", "account_id"}}` — respects `CODEX_HOME`; read-only). Tried when the OpenCode token is missing or rejected by the usage endpoint.
    - Command Code: `~/.commandcode/auth.json` (`{"apiKey": "..."}`)
    - Devin: `~/.config/opencode-devin-v2/credentials.json` (`{"apiKey", "apiServerUrl"}` — respects `XDG_CONFIG_HOME`; read-only)
 5. **Secure per-provider JSON files** (0600-style local secrets):
@@ -190,7 +191,7 @@ Resolution order (per provider):
    - Cursor access token: `~/.config/openchamber/quota/cursor.json` (`{"accessToken": "..."}`) or `~/.config/opencode/usage-stat/cursor.json`
 6. **Safe `.env` parse** (no shell evaluation): `~/.env`, then ancestor directories of the working directory, then an inferred WSL Windows home `.env` — no hardcoded user paths.
 
-**Codex note:** Codex quota uses the OpenCode V2 **OAuth access token** from SQLite/auth.json (with optional `ChatGPT-Account-Id` header) — **not a cookie**. Do not hardcode API keys in plugin configuration or source.
+**Codex note:** Codex quota uses the OpenCode V2 **OAuth access token** from SQLite/auth.json (with optional `ChatGPT-Account-Id` header) — **not a cookie**. Newer Sign-in-with-ChatGPT token-sharing tokens chat fine but the ChatGPT usage backend rejects them (`401 no_matching_rule`); when that happens — or when no OpenCode token exists — the provider falls back to the Codex CLI's own OAuth token from `~/.codex/auth.json` (run `codex login` to refresh it). Do not hardcode API keys in plugin configuration or source.
 
 **Claude note:** Claude subscription quota uses the same Anthropic OAuth endpoint as Claude Code (`api.anthropic.com/api/oauth/usage`). It requires an OAuth token from `auth.json`; plain API keys will not work.
 
@@ -208,6 +209,10 @@ Resolution order (per provider):
   When resolved, the row shows real standard/core windows with used-percent and reset times, plus the extra-usage cash balance (USD, not FSC). The legacy `/api/organization/subscription/usage` endpoint is not the source of these rate-limit bars. Without a credential, account quota is reported as unavailable rather than fabricated; a failed fetch or a keyring refresh rejection is shown as unknown. An `X-Factory-Org-Id` header is sent only when a credential carries an organization ID (the keyring's `active_organization_id`), matching the CLI.
 
 No Factory credentials are ever logged; the only write this plugin performs is refreshing the CLI keyring's own token pair back into the same file when it expires. Requests use `redirect: "manual"` and never echo error bodies. An old host without plugin RPC support reports that limitation.
+
+### Changes in 2.6.3
+
+- Codex no longer gets stuck on “session expired” after re-authenticating: newer Sign-in-with-ChatGPT token-sharing tokens are rejected by the ChatGPT usage backend even though chat works, so the provider now falls back to the Codex CLI's own OAuth credential (`~/.codex/auth.json`, honors `CODEX_HOME`) when the OpenCode token is missing or rejected. Non-auth failures never trigger the fallback.
 
 ### Changes in 2.6.2
 

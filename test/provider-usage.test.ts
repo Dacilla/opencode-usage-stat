@@ -4,8 +4,7 @@ import {
   parseOpenCodeGoUsage,
   parseDeepSeekBalance,
   parseCodexUsage,
-  parseClaudeUsage,
-  parseKimiUsage,
+  parseClaudeUsage,  parseKimiUsage,
   parseZaiUsage,
   parseZhipuaiUsage,
   parseMiniMaxUsage,
@@ -32,6 +31,9 @@ import {
   fetchDeepSeekBalance,
   fetchCodexUsage,
   fetchCommandCodeUsage,
+  resolveCodexCliCredential,
+  codexCliAuthPath,
+  isCodexAuthError,
   checkProviderUsage,
   resolveProviderUsageConfig,
   USAGE_STAT_PROVIDER_IDS,
@@ -1065,4 +1067,130 @@ test("checkProviderUsage devin end-to-end with temp credentials file (offline)",
     if (previous === undefined) delete process.env.XDG_CONFIG_HOME
     else process.env.XDG_CONFIG_HOME = previous
   }
+})
+
+// ── Codex CLI credential fallback (~/.codex/auth.json) ──
+
+test("resolveCodexCliCredential reads the nested Codex CLI shape", () => {
+  const dir = mkdtempSync(join(tmpdir(), "codex-cli-"))
+  const file = join(dir, "auth.json")
+  writeFileSync(file, JSON.stringify({
+    auth_mode: "chatgpt",
+    tokens: { id_token: "id", access_token: "cli-access-1", refresh_token: "rt", account_id: "acct-1" },
+    last_refresh: "2026-10-08T00:00:00Z",
+  }))
+  assert.deepEqual(resolveCodexCliCredential(file), { token: "cli-access-1", accountId: "acct-1" })
+})
+
+test("resolveCodexCliCredential tolerates the flat shape and missing account", () => {
+  const dir = mkdtempSync(join(tmpdir(), "codex-flat-"))
+  const file = join(dir, "auth.json")
+  writeFileSync(file, JSON.stringify({ access_token: "flat-token" }))
+  assert.deepEqual(resolveCodexCliCredential(file), { token: "flat-token", accountId: null })
+})
+
+test("resolveCodexCliCredential ignores API-key-only and malformed files", () => {
+  const dir = mkdtempSync(join(tmpdir(), "codex-bad-"))
+  const apiKeyOnly = join(dir, "api.json")
+  writeFileSync(apiKeyOnly, JSON.stringify({ auth_mode: "apikey", OPENAI_API_KEY: "at-secret" }))
+  assert.equal(resolveCodexCliCredential(apiKeyOnly), null)
+  const malformed = join(dir, "malformed.json")
+  writeFileSync(malformed, "not-json{{{")
+  assert.equal(resolveCodexCliCredential(malformed), null)
+  assert.equal(resolveCodexCliCredential(join(dir, "missing.json")), null)
+})
+
+test("codexCliAuthPath honors CODEX_HOME", () => {
+  const previous = process.env.CODEX_HOME
+  try {
+    process.env.CODEX_HOME = join(tmpdir(), "codex-home-test")
+    assert.equal(codexCliAuthPath(), join(tmpdir(), "codex-home-test", "auth.json"))
+  } finally {
+    if (previous === undefined) delete process.env.CODEX_HOME
+    else process.env.CODEX_HOME = previous
+  }
+})
+
+test("isCodexAuthError flags auth rejections only", () => {
+  assert.equal(isCodexAuthError(new Error("Codex session expired — re-authenticate with OpenAI")), true)
+  assert.equal(isCodexAuthError(new Error("Codex API error: 401")), true)
+  assert.equal(isCodexAuthError(new Error("Codex API error: 403")), true)
+  assert.equal(isCodexAuthError(new Error("unauthorized")), true)
+  assert.equal(isCodexAuthError(new Error("Codex API error: 500")), false)
+  assert.equal(isCodexAuthError(new Error("Codex usage data could not be parsed")), false)
+})
+
+function codexTokenRouter(opencodeStatus: number, cliPayload: unknown) {
+  const calls: string[] = []
+  const fetchImpl = (async (_url: string, init?: RequestInit) => {
+    const auth = String((init?.headers as Record<string, string> | undefined)?.Authorization ?? "")
+    calls.push(auth)
+    if (auth === "Bearer opencode-token") {
+      return { ok: false, status: opencodeStatus, text: async () => "{}", json: async () => ({}) } as Response
+    }
+    return { ok: true, status: 200, json: async () => cliPayload, text: async () => "{}" } as Response
+  }) as unknown as typeof fetch
+  return { calls, fetchImpl }
+}
+
+test("codex falls back to the Codex CLI credential after an OpenCode 401", async () => {
+  let cliAccountHeader = ""
+  const { calls, fetchImpl: router } = codexTokenRouter(401, {
+    rate_limit: { primary_window: { used_percent: 11, limit_window_seconds: 18000 } },
+  })
+  const fetchImpl = (async (url: string, init?: RequestInit) => {
+    if (String((init?.headers as Record<string, string> | undefined)?.Authorization ?? "") === "Bearer cli-token") {
+      cliAccountHeader = String((init?.headers as Record<string, string> | undefined)?.["ChatGPT-Account-Id"] ?? "")
+    }
+    return router(url, init)
+  }) as unknown as typeof fetch
+  const result = await checkProviderUsage(
+    "codex",
+    fetchImpl,
+    fakeCredential("opencode-token", null),
+    () => ({ token: "cli-token", accountId: "cli-acct" }),
+  )
+  assert.equal(result.configured, true)
+  assert.equal(result.ok, true)
+  assert.equal(result.windows?.[0]?.percent, 11)
+  assert.deepEqual(calls, ["Bearer opencode-token", "Bearer cli-token"])
+  assert.equal(cliAccountHeader, "cli-acct")
+})
+
+test("codex uses the Codex CLI credential when no OpenCode credential exists", async () => {
+  const { calls, fetchImpl } = codexTokenRouter(401, {
+    rate_limit: { primary_window: { used_percent: 22, limit_window_seconds: 18000 } },
+  })
+  const result = await checkProviderUsage(
+    "codex",
+    fetchImpl,
+    fakeCredential(null),
+    () => ({ token: "cli-token", accountId: null }),
+  )
+  assert.equal(result.configured, true)
+  assert.equal(result.ok, true)
+  assert.equal(result.windows?.[0]?.percent, 22)
+  assert.deepEqual(calls, ["Bearer cli-token"])
+})
+
+test("codex reports not-configured when neither credential exists", async () => {
+  const result = await checkProviderUsage("codex", mockFetch(200, {}), fakeCredential(null), () => null)
+  assert.equal(result.configured, false)
+  assert.equal(result.ok, false)
+})
+
+test("codex does not retry with the CLI credential on non-auth errors", async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls++
+    return { ok: false, status: 500, text: async () => "boom", json: async () => ({}) } as Response
+  }) as unknown as typeof fetch
+  const result = await checkProviderUsage(
+    "codex",
+    fetchImpl,
+    fakeCredential("opencode-token", null),
+    () => ({ token: "cli-token", accountId: null }),
+  )
+  assert.equal(result.ok, false)
+  assert.equal(calls, 1)
 })

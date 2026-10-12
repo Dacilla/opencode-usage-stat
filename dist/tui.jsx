@@ -50,19 +50,6 @@ function formatResetDuration(iso, nowMs = Date.now(), maxUnits = 0) {
   if (mins > 0) parts.push(`${mins}m`);
   return (maxUnits > 0 ? parts.slice(0, maxUnits) : parts).join(" ");
 }
-function formatDurationSpan(ms, maxUnits = 0) {
-  if (!Number.isFinite(ms) || ms <= 0) return "now";
-  if (ms < 6e4) return `${Math.max(1, Math.round(ms / 1e3))}s`;
-  const minutes = Math.floor(ms / 6e4);
-  const days = Math.floor(minutes / 1440);
-  const hours = Math.floor(minutes % 1440 / 60);
-  const mins = minutes % 60;
-  const parts = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0) parts.push(`${hours}h`);
-  if (mins > 0) parts.push(`${mins}m`);
-  return (maxUnits > 0 ? parts.slice(0, maxUnits) : parts).join(" ");
-}
 function percentileSorted(sortedAsc, p) {
   if (sortedAsc.length === 0) return 0;
   if (sortedAsc.length === 1) return sortedAsc[0];
@@ -1500,6 +1487,36 @@ async function fetchCodexUsage(accessToken, accountId, fetchImpl = fetch) {
   if (windows.length === 0) throw new Error("Codex usage data could not be parsed");
   return windows;
 }
+function codexCliAuthPath() {
+  const override = process.env.CODEX_HOME?.trim();
+  if (override) return join4(override, "auth.json");
+  return join4(homedir4(), ".codex", "auth.json");
+}
+function resolveCodexCliCredential(authPath = codexCliAuthPath()) {
+  try {
+    if (!existsSync4(authPath)) return null;
+    const raw = readFileSync4(authPath, "utf8").trim();
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== "object") return null;
+    const root = data;
+    const nested = root.tokens && typeof root.tokens === "object" ? root.tokens : null;
+    const token = nonEmptyString(
+      nested?.access_token ?? nested?.accessToken ?? root.access_token ?? root.accessToken
+    );
+    if (!token) return null;
+    const accountId = nonEmptyString(
+      nested?.account_id ?? nested?.accountId ?? nested?.accountID ?? root.account_id ?? root.accountId ?? root.accountID
+    );
+    return { token, accountId };
+  } catch {
+    return null;
+  }
+}
+function isCodexAuthError(err) {
+  const message = err instanceof Error ? err.message : String(err ?? "");
+  return /session expired|unauthorized|authenticate|401|403/i.test(message);
+}
 var CLAUDE_ALIASES = ["anthropic", "claude"];
 var CLAUDE_ENV_KEYS = [];
 var CLAUDE_URL = "https://api.anthropic.com/api/oauth/usage";
@@ -2579,7 +2596,7 @@ function isOverPace(win, nowMs = Date.now()) {
   const pace = windowPacePercent(win, nowMs);
   return win.percent != null && pace != null && win.percent > pace;
 }
-async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential = defaultCredentialResolver) {
+async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential = defaultCredentialResolver, getCodexCliCredential = resolveCodexCliCredential) {
   const spec = PROVIDERS.find((p) => p.id === providerId);
   if (!spec) return { providerId, providerName: providerId, configured: false, ok: false, status: "Unknown provider" };
   const finishError = (configured, message) => ({
@@ -2636,6 +2653,16 @@ async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential =
     }
   }
   const secret = spec.id === "command-code" ? resolveCommandCodeCredential(resolved) : resolved.value;
+  if (!secret && spec.id === "codex") {
+    const cli = getCodexCliCredential();
+    if (!cli?.token) return finishError(false, "not configured");
+    try {
+      const windows = await fetchCodexUsage(cli.token, cli.accountId, fetchImpl);
+      return { providerId: spec.id, providerName: spec.name, configured: true, ok: true, status: summarize(spec.name, windows), windows };
+    } catch (err) {
+      return finishError(true, err instanceof Error ? err.message : "Request failed");
+    }
+  }
   if (!secret) {
     return finishError(false, "not configured");
   }
@@ -2649,9 +2676,31 @@ async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential =
       case "deepseek":
         windows = await fetchDeepSeekBalance(secret, fetchImpl);
         break;
-      case "codex":
-        windows = await fetchCodexUsage(secret, resolved.accountId, fetchImpl);
+      case "codex": {
+        const candidates = [
+          { token: secret, accountId: resolved.accountId }
+        ];
+        const cli = getCodexCliCredential();
+        if (cli?.token && cli.token !== secret) {
+          candidates.push({ token: cli.token, accountId: cli.accountId ?? resolved.accountId });
+        }
+        let codexWindows = null;
+        let lastErr = null;
+        for (const candidate of candidates) {
+          try {
+            codexWindows = await fetchCodexUsage(candidate.token, candidate.accountId, fetchImpl);
+            lastErr = null;
+            break;
+          } catch (err) {
+            lastErr = err;
+            const isLast = candidate === candidates[candidates.length - 1];
+            if (isLast || !isCodexAuthError(err)) throw err;
+          }
+        }
+        if (!codexWindows) throw lastErr;
+        windows = codexWindows;
         break;
+      }
       case "claude":
         windows = await fetchClaudeUsage(secret, fetchImpl);
         break;
@@ -3545,6 +3594,9 @@ function truncateToWidth(str2, width, ellipsis = "\u2026") {
   }
   return out + ellipsis;
 }
+function padEndToWidth(str2, width) {
+  return str2 + " ".repeat(Math.max(0, width - visualWidth(str2)));
+}
 function centerAlign(text2, width) {
   if (width <= 0) return "";
   const fitted = truncateToWidth(text2, width);
@@ -3591,6 +3643,14 @@ function distBarWidth(contentWidth, prefixWidth, suffix, showTrend) {
   const suffixW = Math.max(budget, visualWidth(suffix));
   return clamp(contentWidth - prefixWidth - suffixW, DIST_BAR_MIN, DIST_BAR_MAX);
 }
+var PROVIDER_BAR_MIN = 5;
+var PROVIDER_BAR_MAX = 20;
+var PROVIDER_SUFFIX_USED = 7;
+var PROVIDER_SUFFIX_REMAINING = 12;
+var PROVIDER_SUFFIX_PACE = 6;
+function providerBarWidth(contentWidth, gutterWidth, suffixBudget) {
+  return clamp(contentWidth - gutterWidth - suffixBudget, PROVIDER_BAR_MIN, PROVIDER_BAR_MAX);
+}
 function providerHeaderFit(available, name, right) {
   const chrome = 4;
   const fittedName = truncateToWidth(name, Math.max(1, available - chrome));
@@ -3603,21 +3663,38 @@ function usageLevel(usedPercent) {
   if (usedPercent >= 70) return "warn";
   return "ok";
 }
-var EIGHTH_BLOCKS = ["", "\u258F", "\u258E", "\u258D", "\u258C", "\u258B", "\u258A", "\u2589"];
-function percentBarSmooth(percent, width) {
-  const p = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0;
-  const w = Math.max(0, Math.floor(width));
-  if (w === 0) return "";
-  const cells = p / 100 * w;
-  const full = Math.min(w, Math.floor(cells));
-  const eighths = Math.round((cells - full) * 8);
-  if (eighths >= 8) return "\u2588".repeat(Math.min(w, full + 1)) + "\u2591".repeat(Math.max(0, w - full - 1));
-  const head = eighths > 0 && full < w ? EIGHTH_BLOCKS[eighths] : "";
-  const empty = Math.max(0, w - full - (head ? 1 : 0));
-  return "\u2588".repeat(full) + head + "\u2591".repeat(empty);
-}
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, Math.floor(value)));
+}
+function solidBar(percent, width, markerIndex) {
+  const p = Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0;
+  const w = Math.max(0, Math.floor(width));
+  if (w === 0) return [];
+  const filledCells = Math.min(w, Math.floor(p / 100 * w));
+  const glyphAt = (i) => {
+    if (markerIndex != null && i === markerIndex) return "\u2502";
+    return "\u2588";
+  };
+  const kindAt = (i) => {
+    if (markerIndex != null && i === markerIndex) return "marker";
+    return i < filledCells ? "filled" : "empty";
+  };
+  const out = [];
+  let cur = "";
+  let curKind = null;
+  for (let i = 0; i < w; i++) {
+    const k = kindAt(i);
+    const g = glyphAt(i);
+    if (k === curKind) {
+      cur += g;
+    } else {
+      if (curKind != null) out.push({ text: cur, kind: curKind });
+      cur = g;
+      curKind = k;
+    }
+  }
+  if (curKind != null) out.push({ text: cur, kind: curKind });
+  return out;
 }
 
 // src/provider-usage-blocks.tsx
@@ -3665,11 +3742,6 @@ function createSmoothPercents() {
       }
     }
   };
-}
-var BAR_WIDTH = 12;
-function splitBar(bar, markerIndex) {
-  if (markerIndex == null) return [bar, "", ""];
-  return [bar.slice(0, markerIndex), "\u2588", bar.slice(markerIndex + 1)];
 }
 var PROVIDER_NAMES = Object.fromEntries(PROVIDERS.map((p) => [p.id, p.name]));
 var FALLBACK_COLOR = RGBA2.fromInts(80, 190, 255, 255);
@@ -3726,8 +3798,25 @@ function ProviderUsageBlocks(props) {
     settingsStore = store;
   } catch {
   }
-  const displayMode = () => settingsStore?.providerUsageDisplay === "remaining" ? "remaining" : "used";
-  const showPace = () => settingsStore?.showPace !== false;
+  const displayMode = () => {
+    const stored = settingsStore?.providerUsageDisplay;
+    if (stored === "remaining" || stored === "used") return stored;
+    try {
+      const fromOptions = optionsToSettings(context.options).providerUsageDisplay;
+      if (fromOptions === "remaining" || fromOptions === "used") return fromOptions;
+    } catch {
+    }
+    return DEFAULT_SETTINGS.providerUsageDisplay;
+  };
+  const showPace = () => {
+    if (settingsStore?.showPace !== void 0) return settingsStore.showPace === true;
+    try {
+      const fromOptions = optionsToSettings(context.options).showPace;
+      if (typeof fromOptions === "boolean") return fromOptions;
+    } catch {
+    }
+    return DEFAULT_SETTINGS.showPace;
+  };
   const isCollapsed = (id) => {
     const override = localCollapse()[id];
     if (override !== void 0) return override;
@@ -3991,6 +4080,21 @@ function ProviderUsageBlocks(props) {
             return status.startsWith(prefix) ? status.slice(prefix.length) : status;
           };
           const header = () => providerHeaderFit(panelWidth() - HEADER_INSET, PROVIDER_NAMES[state.id] ?? state.id, headerText());
+          const displayLabel = (raw) => {
+            if (state.id === "droid") {
+              const g = /^(Standard|Core) · (5h|weekly|monthly)$/.exec(raw);
+              if (g) return g[2].charAt(0).toUpperCase() + g[2].slice(1);
+            }
+            return raw;
+          };
+          const labelWidth = () => {
+            let m = 0;
+            for (const w of state.result?.windows ?? []) m = Math.max(m, visualWidth(`${displayLabel(w.label)}: `));
+            return m;
+          };
+          const suffixBudget = () => (displayMode() === "remaining" ? PROVIDER_SUFFIX_REMAINING : PROVIDER_SUFFIX_USED) + (showPace() ? PROVIDER_SUFFIX_PACE : 0);
+          const minContentWidth = () => panelWidth() - BODY_INSET - (state.id === "droid" ? 1 : 0);
+          const barWidth = () => providerBarWidth(minContentWidth(), labelWidth(), suffixBudget());
           const smooth = createSmoothPercents();
           createEffect(() => {
             for (const w of state.result?.windows ?? []) {
@@ -4084,9 +4188,9 @@ function ProviderUsageBlocks(props) {
                         const windowLabel2 = droidGroup ? droidGroup[2].charAt(0).toUpperCase() + droidGroup[2].slice(1) : win.label;
                         const isDollarPool = DOLLAR_POOL_LABEL.test(win.valueLabel ?? "");
                         const label = windowLabel2 ? windowLabel2 + ": " : "";
+                        const paddedLabel = () => padEndToWidth(label, labelWidth());
                         const contentWidth = () => panelWidth() - BODY_INSET - (droidGroup ? 1 : 0);
                         const winColor = () => levelColor(usageLevel(win.percent));
-                        const markerIndex = () => paceMarkerIndex(win, displayMode(), BAR_WIDTH, nowMs());
                         const paceColor = () => isOverPace(win, nowMs()) ? redColor() : greenColor();
                         const paceShown = () => {
                           const pace = windowPacePercent(win, nowMs());
@@ -4105,172 +4209,173 @@ function ProviderUsageBlocks(props) {
                               return displayMode() === "remaining" ? 100 - pct2 : pct2;
                             };
                             const percentSuffix = () => ` ${shownPercent().toFixed(1)}%${displayMode() === "remaining" ? ` ${t("left")}` : ""}`;
-                            const bar = () => splitBar(percentBarSmooth(shownPercent(), BAR_WIDTH), markerIndex());
+                            const paceSuffix = () => showPace() && paceShown() != null ? ` \u2502${Math.round(paceShown())}%` : "";
+                            const line1Pace = () => paceSuffix();
                             const resetText = () => win.resetsAt ? formatResetDuration(win.resetsAt, nowMs(), 2) : "";
                             const hoverText = () => {
-                              if (!win.startsAt || !win.resetsAt) return "";
-                              const start = Date.parse(win.startsAt);
-                              const end = Date.parse(win.resetsAt);
                               const pace = paceShown();
-                              const pacePart = pace != null ? `\u2502${Math.round(pace)}% \xB7 ` : "";
-                              return ` \xB7 ${pacePart}${formatDurationSpan(nowMs() - start, 2)} / ${formatDurationSpan(end - start, 2)} elapsed`;
+                              return pace != null ? `\u2502${Math.round(pace)}%` : "";
                             };
+                            const markerIdx = () => paceMarkerIndex(win, displayMode(), barWidth(), nowMs());
+                            const parts = () => solidBar(shownPercent(), barWidth(), markerIdx());
+                            const resetLine = () => {
+                              if (hover()) return hoverText() || (win.resetsAt ? `\u21BB ${resetText()}` : "");
+                              if (!win.resetsAt) return "";
+                              return truncateToWidth(`\u21BB ${resetText()}`, Math.max(0, contentWidth() - labelWidth()));
+                            };
+                            const renderBar = () => _$createComponent(For, {
+                              get each() {
+                                return parts();
+                              },
+                              children: (part) => (() => {
+                                var _el$13 = _$createElement("span");
+                                _$insert(_el$13, () => part.text);
+                                _$effect((_$p) => _$setProp(_el$13, "style", {
+                                  fg: part.kind === "filled" ? winColor() : part.kind === "marker" ? paceColor() : dimColor()
+                                }, _$p));
+                                return _el$13;
+                              })()
+                            });
                             const poolCredits = isDollarPool ? displayMode() === "remaining" ? dollarPoolRemaining(win.valueLabel) : Math.max(0, totalDollars(win.valueLabel) - (dollarPoolRemaining(win.valueLabel) ?? 0)) : null;
                             const poolAllowance = isDollarPool ? totalDollars(win.valueLabel) : null;
                             return _$createComponent(Show, {
                               when: !isDollarPool,
                               get fallback() {
                                 return (() => {
-                                  var _el$17 = _$createElement("box"), _el$18 = _$createElement("text"), _el$19 = _$createElement("span"), _el$20 = _$createElement("span"), _el$21 = _$createElement("span"), _el$22 = _$createElement("text"), _el$23 = _$createElement("span");
-                                  _$insertNode(_el$17, _el$18);
-                                  _$insertNode(_el$17, _el$22);
-                                  _$setProp(_el$17, "flexDirection", "column");
+                                  var _el$18 = _$createElement("box"), _el$19 = _$createElement("text"), _el$20 = _$createElement("span"), _el$21 = _$createElement("text"), _el$22 = _$createElement("span");
                                   _$insertNode(_el$18, _el$19);
-                                  _$insertNode(_el$18, _el$20);
                                   _$insertNode(_el$18, _el$21);
-                                  _$insert(_el$18, label, _el$19);
-                                  _$insert(_el$19, () => bar()[0]);
-                                  _$insert(_el$20, () => bar()[1]);
-                                  _$insert(_el$21, () => bar()[2], null);
-                                  _$insert(_el$21, percentSuffix, null);
-                                  _$insertNode(_el$22, _el$23);
-                                  _$insert(_el$23, () => `${shortDollars(poolCredits ?? 0)}$/${shortDollars(poolAllowance ?? 0)}$`);
+                                  _$setProp(_el$18, "flexDirection", "column");
+                                  _$insertNode(_el$19, _el$20);
+                                  _$setProp(_el$19, "wrapMode", "none");
+                                  _$spread(_el$19, _$mergeProps({
+                                    get fg() {
+                                      return mutedColor();
+                                    }
+                                  }, rowMouse), true);
+                                  _$insert(_el$19, paddedLabel, _el$20);
+                                  _$insert(_el$19, renderBar, _el$20);
+                                  _$insert(_el$20, percentSuffix);
+                                  _$insertNode(_el$21, _el$22);
+                                  _$setProp(_el$21, "wrapMode", "none");
+                                  _$insert(_el$21, () => " ".repeat(labelWidth()), _el$22);
+                                  _$insert(_el$22, () => truncateToWidth(`${shortDollars(poolCredits ?? 0)}$/${shortDollars(poolAllowance ?? 0)}$`, Math.max(1, contentWidth() - labelWidth())));
                                   _$effect((_p$) => {
-                                    var _v$8 = mutedColor(), _v$9 = {
+                                    var _v$5 = {
                                       fg: winColor()
-                                    }, _v$0 = {
-                                      fg: paceColor()
-                                    }, _v$1 = {
-                                      fg: winColor()
-                                    }, _v$10 = {
+                                    }, _v$6 = dimColor(), _v$7 = {
                                       fg: winColor()
                                     };
-                                    _v$8 !== _p$.e && (_p$.e = _$setProp(_el$18, "fg", _v$8, _p$.e));
-                                    _v$9 !== _p$.t && (_p$.t = _$setProp(_el$19, "style", _v$9, _p$.t));
-                                    _v$0 !== _p$.a && (_p$.a = _$setProp(_el$20, "style", _v$0, _p$.a));
-                                    _v$1 !== _p$.o && (_p$.o = _$setProp(_el$21, "style", _v$1, _p$.o));
-                                    _v$10 !== _p$.i && (_p$.i = _$setProp(_el$23, "style", _v$10, _p$.i));
+                                    _v$5 !== _p$.e && (_p$.e = _$setProp(_el$20, "style", _v$5, _p$.e));
+                                    _v$6 !== _p$.t && (_p$.t = _$setProp(_el$21, "fg", _v$6, _p$.t));
+                                    _v$7 !== _p$.a && (_p$.a = _$setProp(_el$22, "style", _v$7, _p$.a));
                                     return _p$;
                                   }, {
                                     e: void 0,
                                     t: void 0,
-                                    a: void 0,
-                                    o: void 0,
-                                    i: void 0
+                                    a: void 0
                                   });
-                                  return _el$17;
+                                  return _el$18;
                                 })();
                               },
                               get children() {
-                                var _el$13 = _$createElement("text"), _el$14 = _$createElement("span"), _el$15 = _$createElement("span"), _el$16 = _$createElement("span");
-                                _$insertNode(_el$13, _el$14);
-                                _$insertNode(_el$13, _el$15);
-                                _$insertNode(_el$13, _el$16);
-                                _$spread(_el$13, _$mergeProps({
+                                var _el$14 = _$createElement("box"), _el$15 = _$createElement("text"), _el$16 = _$createElement("span");
+                                _$insertNode(_el$14, _el$15);
+                                _$setProp(_el$14, "flexDirection", "column");
+                                _$insertNode(_el$15, _el$16);
+                                _$setProp(_el$15, "wrapMode", "none");
+                                _$spread(_el$15, _$mergeProps({
                                   get fg() {
                                     return mutedColor();
                                   }
                                 }, rowMouse), true);
-                                _$insert(_el$13, label, _el$14);
-                                _$insert(_el$14, () => bar()[0]);
-                                _$insert(_el$15, () => bar()[1]);
-                                _$insert(_el$16, () => bar()[2], null);
-                                _$insert(_el$16, percentSuffix, null);
-                                _$insert(_el$13, (() => {
-                                  var _c$ = _$memo(() => !!(showPace() && paceShown() != null));
+                                _$insert(_el$15, paddedLabel, _el$16);
+                                _$insert(_el$15, renderBar, _el$16);
+                                _$insert(_el$16, percentSuffix);
+                                _$insert(_el$15, (() => {
+                                  var _c$ = _$memo(() => !!line1Pace());
                                   return () => _c$() ? (() => {
-                                    var _el$24 = _$createElement("span");
-                                    _$insert(_el$24, () => ` \u2502${Math.round(paceShown())}%`);
-                                    _$effect((_$p) => _$setProp(_el$24, "style", {
+                                    var _el$23 = _$createElement("span");
+                                    _$insert(_el$23, line1Pace);
+                                    _$effect((_$p) => _$setProp(_el$23, "style", {
                                       fg: dimColor()
                                     }, _$p));
-                                    return _el$24;
+                                    return _el$23;
                                   })() : null;
                                 })(), null);
-                                _$insert(_el$13, (() => {
-                                  var _c$2 = _$memo(() => !!win.resetsAt);
-                                  return () => _c$2() ? (() => {
-                                    var _el$25 = _$createElement("span");
-                                    _$insert(_el$25, (() => {
-                                      var _c$3 = _$memo(() => !!hover());
-                                      return () => _c$3() ? hoverText() : ` \u21BB ${resetText()}`;
-                                    })());
-                                    _$effect((_$p) => _$setProp(_el$25, "style", {
-                                      fg: dimColor()
-                                    }, _$p));
-                                    return _el$25;
-                                  })() : null;
-                                })(), null);
-                                _$effect((_p$) => {
-                                  var _v$5 = {
-                                    fg: winColor()
-                                  }, _v$6 = {
-                                    fg: paceColor()
-                                  }, _v$7 = {
-                                    fg: winColor()
-                                  };
-                                  _v$5 !== _p$.e && (_p$.e = _$setProp(_el$14, "style", _v$5, _p$.e));
-                                  _v$6 !== _p$.t && (_p$.t = _$setProp(_el$15, "style", _v$6, _p$.t));
-                                  _v$7 !== _p$.a && (_p$.a = _$setProp(_el$16, "style", _v$7, _p$.a));
-                                  return _p$;
-                                }, {
-                                  e: void 0,
-                                  t: void 0,
-                                  a: void 0
-                                });
-                                return _el$13;
+                                _$insert(_el$14, _$createComponent(Show, {
+                                  get when() {
+                                    return resetLine();
+                                  },
+                                  get children() {
+                                    var _el$17 = _$createElement("text");
+                                    _$setProp(_el$17, "wrapMode", "none");
+                                    _$spread(_el$17, _$mergeProps({
+                                      get fg() {
+                                        return dimColor();
+                                      }
+                                    }, rowMouse), true);
+                                    _$insert(_el$17, () => " ".repeat(labelWidth()), null);
+                                    _$insert(_el$17, resetLine, null);
+                                    return _el$17;
+                                  }
+                                }), null);
+                                _$effect((_$p) => _$setProp(_el$16, "style", {
+                                  fg: winColor()
+                                }, _$p));
+                                return _el$14;
                               }
                             });
                           }
                           if (win.valueLabel) {
                             return (() => {
-                              var _el$26 = _$createElement("text"), _el$27 = _$createElement("span");
-                              _$insertNode(_el$26, _el$27);
-                              _$insert(_el$26, label, _el$27);
-                              _$insert(_el$27, () => truncateToWidth(win.valueLabel, Math.max(1, contentWidth() - visualWidth(label))));
+                              var _el$24 = _$createElement("text"), _el$25 = _$createElement("span");
+                              _$insertNode(_el$24, _el$25);
+                              _$insert(_el$24, () => padEndToWidth(label, labelWidth()), _el$25);
+                              _$insert(_el$25, () => truncateToWidth(win.valueLabel, Math.max(1, contentWidth() - labelWidth())));
                               _$effect((_p$) => {
-                                var _v$11 = mutedColor(), _v$12 = {
+                                var _v$8 = mutedColor(), _v$9 = {
                                   fg: greenColor()
                                 };
-                                _v$11 !== _p$.e && (_p$.e = _$setProp(_el$26, "fg", _v$11, _p$.e));
-                                _v$12 !== _p$.t && (_p$.t = _$setProp(_el$27, "style", _v$12, _p$.t));
+                                _v$8 !== _p$.e && (_p$.e = _$setProp(_el$24, "fg", _v$8, _p$.e));
+                                _v$9 !== _p$.t && (_p$.t = _$setProp(_el$25, "style", _v$9, _p$.t));
                                 return _p$;
                               }, {
                                 e: void 0,
                                 t: void 0
                               });
-                              return _el$26;
+                              return _el$24;
                             })();
                           }
                           return (() => {
-                            var _el$28 = _$createElement("text"), _el$29 = _$createTextNode(`\u2014`);
-                            _$insertNode(_el$28, _el$29);
-                            _$insert(_el$28, label, _el$29);
-                            _$effect((_$p) => _$setProp(_el$28, "fg", mutedColor(), _$p));
-                            return _el$28;
+                            var _el$26 = _$createElement("text"), _el$27 = _$createTextNode(`\u2014`);
+                            _$insertNode(_el$26, _el$27);
+                            _$insert(_el$26, () => padEndToWidth(label, labelWidth()), _el$27);
+                            _$effect((_$p) => _$setProp(_el$26, "fg", mutedColor(), _$p));
+                            return _el$26;
                           })();
                         }
                         if (droidGroup) {
                           return (() => {
-                            var _el$30 = _$createElement("box"), _el$33 = _$createElement("box");
-                            _$insertNode(_el$30, _el$33);
-                            _$setProp(_el$30, "flexDirection", "column");
-                            _$insert(_el$30, _$createComponent(Show, {
+                            var _el$28 = _$createElement("box"), _el$31 = _$createElement("box");
+                            _$insertNode(_el$28, _el$31);
+                            _$setProp(_el$28, "flexDirection", "column");
+                            _$insert(_el$28, _$createComponent(Show, {
                               get when() {
                                 return !state.result?.windows?.[index() - 1]?.label.startsWith(`${droidGroup[1]} \xB7 `);
                               },
                               get children() {
-                                var _el$31 = _$createElement("text"), _el$32 = _$createTextNode(`:`);
-                                _$insertNode(_el$31, _el$32);
-                                _$insert(_el$31, () => droidGroup[1], _el$32);
-                                _$effect((_$p) => _$setProp(_el$31, "fg", mutedColor(), _$p));
-                                return _el$31;
+                                var _el$29 = _$createElement("text"), _el$30 = _$createTextNode(`:`);
+                                _$insertNode(_el$29, _el$30);
+                                _$insert(_el$29, () => droidGroup[1], _el$30);
+                                _$effect((_$p) => _$setProp(_el$29, "fg", mutedColor(), _$p));
+                                return _el$29;
                               }
-                            }), _el$33);
-                            _$setProp(_el$33, "flexDirection", "column");
-                            _$setProp(_el$33, "paddingLeft", 1);
-                            _$insert(_el$33, renderWindow);
-                            return _el$30;
+                            }), _el$31);
+                            _$setProp(_el$31, "flexDirection", "column");
+                            _$setProp(_el$31, "paddingLeft", 1);
+                            _$insert(_el$31, renderWindow);
+                            return _el$28;
                           })();
                         }
                         return renderWindow();

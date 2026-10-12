@@ -1,6 +1,6 @@
 {
   "name": "opencode-usage-stat",
-  "version": "2.6.2",
+  "version": "2.6.3",
   "description": "Opencode V2 plugin: real-time token/cache/performance stats, 19 provider usage integrations, and polished HTML usage dashboards",
   "type": "module",
   "main": "./dist/server.js",
@@ -31,6 +31,7 @@
   },
   "scripts": {
     "build": "tsc --emitDeclarationOnly && node build.tui.mjs",
+    "render": "node build.render.mjs && node --conditions=browser dist-render/render.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "node build.tests.mjs && node --test \"dist-test/*.test.mjs\"",
     "prepublishOnly": "npm run build"

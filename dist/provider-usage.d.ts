@@ -82,6 +82,22 @@ export interface CodexPayload {
 /** Parse the ChatGPT wham/usage payload. */
 export declare function parseCodexUsage(payload: unknown): UsageWindow[];
 export declare function fetchCodexUsage(accessToken: string, accountId: string | null, fetchImpl?: FetchLike): Promise<UsageWindow[]>;
+export interface CodexCliCredential {
+    token: string;
+    accountId: string | null;
+}
+/** Codex CLI auth file (~/.codex/auth.json, honoring CODEX_HOME). Never throws. */
+export declare function codexCliAuthPath(): string;
+/**
+ * Read the Codex CLI's own OAuth credential ({ tokens: { access_token,
+ * account_id } }, tolerating flat { access_token, account_id } shapes).
+ * API-key-only files (`OPENAI_API_KEY` without an access token) are ignored:
+ * plain API keys cannot query the ChatGPT wham/usage endpoint. Secrets are
+ * never logged — callers receive the token in memory only.
+ */
+export declare function resolveCodexCliCredential(authPath?: string): CodexCliCredential | null;
+/** True when an error looks like a wham/usage auth rejection (worth retrying with the other credential). */
+export declare function isCodexAuthError(err: unknown): boolean;
 export declare const CLAUDE_ALIASES: string[];
 export declare const CLAUDE_ENV_KEYS: string[];
 export declare const CLAUDE_URL = "https://api.anthropic.com/api/oauth/usage";
@@ -305,7 +321,7 @@ export declare function isOverPace(win: Pick<UsageWindow, "percent" | "startsAt"
  * Resolve secret (kept private) and fetch provider usage.
  * `getCredential` is injectable for tests (defaults to the real resolver).
  */
-export declare function checkProviderUsage(providerId: ProviderId, fetchImpl?: FetchLike, getCredential?: CredentialResolver): Promise<ProviderUsageResult>;
+export declare function checkProviderUsage(providerId: ProviderId, fetchImpl?: FetchLike, getCredential?: CredentialResolver, getCodexCliCredential?: () => CodexCliCredential | null): Promise<ProviderUsageResult>;
 export type ProviderUsageConfig = Partial<Record<ProviderId, boolean>>;
 /** Provider polling is opt-in; omitted or non-boolean values remain disabled. */
 export declare function resolveProviderUsageConfig(options: unknown): Record<ProviderId, boolean>;

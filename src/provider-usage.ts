@@ -383,6 +383,56 @@ export async function fetchCodexUsage(accessToken: string, accountId: string | n
   return windows
 }
 
+export interface CodexCliCredential {
+  token: string
+  accountId: string | null
+}
+
+/** Codex CLI auth file (~/.codex/auth.json, honoring CODEX_HOME). Never throws. */
+export function codexCliAuthPath(): string {
+  const override = process.env.CODEX_HOME?.trim()
+  if (override) return join(override, "auth.json")
+  return join(homedir(), ".codex", "auth.json")
+}
+
+/**
+ * Read the Codex CLI's own OAuth credential ({ tokens: { access_token,
+ * account_id } }, tolerating flat { access_token, account_id } shapes).
+ * API-key-only files (`OPENAI_API_KEY` without an access token) are ignored:
+ * plain API keys cannot query the ChatGPT wham/usage endpoint. Secrets are
+ * never logged — callers receive the token in memory only.
+ */
+export function resolveCodexCliCredential(authPath: string = codexCliAuthPath()): CodexCliCredential | null {
+  try {
+    if (!existsSync(authPath)) return null
+    const raw = readFileSync(authPath, "utf8").trim()
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (!data || typeof data !== "object") return null
+    const root = data as Record<string, unknown>
+    const nested = root.tokens && typeof root.tokens === "object"
+      ? root.tokens as Record<string, unknown>
+      : null
+    const token = nonEmptyString(
+      nested?.access_token ?? nested?.accessToken ?? root.access_token ?? root.accessToken,
+    )
+    if (!token) return null
+    const accountId = nonEmptyString(
+      nested?.account_id ?? nested?.accountId ?? nested?.accountID
+        ?? root.account_id ?? root.accountId ?? root.accountID,
+    )
+    return { token, accountId }
+  } catch {
+    return null
+  }
+}
+
+/** True when an error looks like a wham/usage auth rejection (worth retrying with the other credential). */
+export function isCodexAuthError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? "")
+  return /session expired|unauthorized|authenticate|401|403/i.test(message)
+}
+
 // ── Claude Pro / Max ──
 
 export const CLAUDE_ALIASES = ["anthropic", "claude"]
@@ -1772,6 +1822,7 @@ export async function checkProviderUsage(
   providerId: ProviderId,
   fetchImpl: FetchLike = fetch,
   getCredential: CredentialResolver = defaultCredentialResolver,
+  getCodexCliCredential: () => CodexCliCredential | null = resolveCodexCliCredential,
 ): Promise<ProviderUsageResult> {
   const spec = PROVIDERS.find(p => p.id === providerId)
   if (!spec) return { providerId, providerName: providerId, configured: false, ok: false, status: "Unknown provider" }
@@ -1840,6 +1891,17 @@ export async function checkProviderUsage(
   }
 
   const secret = spec.id === "command-code" ? resolveCommandCodeCredential(resolved) : resolved.value
+  if (!secret && spec.id === "codex") {
+    // No OpenCode credential: try the Codex CLI file directly before giving up.
+    const cli = getCodexCliCredential()
+    if (!cli?.token) return finishError(false, "not configured")
+    try {
+      const windows = await fetchCodexUsage(cli.token, cli.accountId, fetchImpl)
+      return { providerId: spec.id, providerName: spec.name, configured: true, ok: true, status: summarize(spec.name, windows), windows }
+    } catch (err) {
+      return finishError(true, err instanceof Error ? err.message : "Request failed")
+    }
+  }
   if (!secret) {
     return finishError(false, "not configured")
   }
@@ -1854,9 +1916,36 @@ export async function checkProviderUsage(
       case "deepseek":
         windows = await fetchDeepSeekBalance(secret, fetchImpl)
         break
-      case "codex":
-        windows = await fetchCodexUsage(secret, resolved.accountId, fetchImpl)
+      case "codex": {
+        // The OpenCode credential may be a Sign-in-with-ChatGPT token-sharing
+        // token (aud api.openai.com, scope chatgpt.tokens.use.direct) which
+        // chats fine but the ChatGPT wham/usage backend rejects with 401
+        // no_matching_rule. Fall back to the Codex CLI's own OAuth credential
+        // (~/.codex/auth.json), which targets that backend directly.
+        const candidates: Array<{ token: string; accountId: string | null }> = [
+          { token: secret, accountId: resolved.accountId },
+        ]
+        const cli = getCodexCliCredential()
+        if (cli?.token && cli.token !== secret) {
+          candidates.push({ token: cli.token, accountId: cli.accountId ?? resolved.accountId })
+        }
+        let codexWindows: UsageWindow[] | null = null
+        let lastErr: unknown = null
+        for (const candidate of candidates) {
+          try {
+            codexWindows = await fetchCodexUsage(candidate.token, candidate.accountId, fetchImpl)
+            lastErr = null
+            break
+          } catch (err) {
+            lastErr = err
+            const isLast = candidate === candidates[candidates.length - 1]
+            if (isLast || !isCodexAuthError(err)) throw err
+          }
+        }
+        if (!codexWindows) throw lastErr
+        windows = codexWindows
         break
+      }
       case "claude":
         windows = await fetchClaudeUsage(secret, fetchImpl)
         break

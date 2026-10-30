@@ -142,7 +142,7 @@ Only providers set to `true` are queried. The plugin reads credentials **at runt
 | `opencode-go` | OpenCode Go | API key |
 | `deepseek` | DeepSeek | API key |
 | `codex` | Codex / ChatGPT | OpenCode OAuth token, falling back to the Codex CLI OAuth token (`~/.codex/auth.json`, honors `CODEX_HOME`) |
-| `claude` | Claude Pro/Max | Claude Code OAuth access token (auth.json) |
+| `claude` | Claude Pro/Max | OpenCode OAuth token (auth.json / SQLite) or Claude Code OAuth token (`~/.claude/.credentials.json`, honors `CLAUDE_CONFIG_DIR`) |
 | `kimi-for-coding` | Kimi for Coding | API key |
 | `zai-coding-plan` | z.ai Coding Plan | API key |
 | `zhipuai-coding-plan` | Zhipu AI Coding Plan | API key |
@@ -193,7 +193,7 @@ Resolution order (per provider):
 
 **Codex note:** Codex quota uses the OpenCode V2 **OAuth access token** from SQLite/auth.json (with optional `ChatGPT-Account-Id` header) — **not a cookie**. Newer Sign-in-with-ChatGPT token-sharing tokens chat fine but the ChatGPT usage backend rejects them (`401 no_matching_rule`); when that happens — or when no OpenCode token exists — the provider falls back to the Codex CLI's own OAuth token from `~/.codex/auth.json` (run `codex login` to refresh it). Do not hardcode API keys in plugin configuration or source.
 
-**Claude note:** Claude subscription quota uses the same Anthropic OAuth endpoint as Claude Code (`api.anthropic.com/api/oauth/usage`). It requires an OAuth token from `auth.json`; plain API keys will not work.
+**Claude note:** Claude subscription quota uses the same Anthropic OAuth endpoint as Claude Code (`api.anthropic.com/api/oauth/usage`). It requires an OAuth access token, not an API key. OpenCode's native **Claude Agent** integration stores only an `external` marker with no token, so the plugin falls back to Claude Code's own credential file (`~/.claude/.credentials.json`, or `$CLAUDE_CONFIG_DIR/.credentials.json`). That file is read-only and refreshed by Claude Code itself; run Claude once if the row reports a session expired.
 
 **Google note:** refreshing the Gemini/Antigravity access token needs a Google **installed-application** OAuth client supplied via `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (e.g. the Gemini CLI's public client credentials). Without them the `google` provider reports a configuration error instead of querying quotas.
 

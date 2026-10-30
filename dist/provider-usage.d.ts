@@ -101,6 +101,21 @@ export declare function isCodexAuthError(err: unknown): boolean;
 export declare const CLAUDE_ALIASES: string[];
 export declare const CLAUDE_ENV_KEYS: string[];
 export declare const CLAUDE_URL = "https://api.anthropic.com/api/oauth/usage";
+export interface ClaudeCliCredential {
+    token: string;
+    expires: number | null;
+}
+/** Claude Code credential file (~/.claude/.credentials.json, honoring CLAUDE_CONFIG_DIR). */
+export declare function claudeCliCredentialPath(): string;
+/**
+ * Read Claude Code's own OAuth credential ({ claudeAiOauth: { accessToken,
+ * expiresAt } }, tolerating a flat shape). API-key-only / external logins are
+ * ignored: only an OAuth access token can query the usage endpoint. Secrets are
+ * never logged - callers receive the token in memory only.
+ */
+export declare function resolveClaudeCliCredential(path?: string): ClaudeCliCredential | null;
+/** True when an error looks like an Anthropic OAuth rejection (worth retrying with the CLI token). */
+export declare function isClaudeAuthError(err: unknown): boolean;
 /**
  * Parse the Anthropic OAuth usage payload:
  *   limits[].kind = session -> 5h window, weekly_all -> 7d window,
@@ -321,7 +336,7 @@ export declare function isOverPace(win: Pick<UsageWindow, "percent" | "startsAt"
  * Resolve secret (kept private) and fetch provider usage.
  * `getCredential` is injectable for tests (defaults to the real resolver).
  */
-export declare function checkProviderUsage(providerId: ProviderId, fetchImpl?: FetchLike, getCredential?: CredentialResolver, getCodexCliCredential?: () => CodexCliCredential | null): Promise<ProviderUsageResult>;
+export declare function checkProviderUsage(providerId: ProviderId, fetchImpl?: FetchLike, getCredential?: CredentialResolver, getCodexCliCredential?: () => CodexCliCredential | null, getClaudeCliCredential?: () => ClaudeCliCredential | null): Promise<ProviderUsageResult>;
 export type ProviderUsageConfig = Partial<Record<ProviderId, boolean>>;
 /** Provider polling is opt-in; omitted or non-boolean values remain disabled. */
 export declare function resolveProviderUsageConfig(options: unknown): Record<ProviderId, boolean>;

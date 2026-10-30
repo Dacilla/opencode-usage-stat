@@ -34,6 +34,9 @@ import {
   resolveCodexCliCredential,
   codexCliAuthPath,
   isCodexAuthError,
+  resolveClaudeCliCredential,
+  claudeCliCredentialPath,
+  isClaudeAuthError,
   checkProviderUsage,
   resolveProviderUsageConfig,
   USAGE_STAT_PROVIDER_IDS,
@@ -491,6 +494,95 @@ test("parseClaudeUsage falls back to legacy five_hour/seven_day and adds scoped 
 })
 
 // ── Kimi / z.ai / Zhipu / MiniMax ──
+
+// Claude Code CLI credential fallback (~/.claude/.credentials.json)
+
+test("resolveClaudeCliCredential reads the nested Claude Code shape", () => {
+  const dir = mkdtempSync(join(tmpdir(), "claude-cli-"))
+  const file = join(dir, "credentials.json")
+  writeFileSync(file, JSON.stringify({
+    claudeAiOauth: { accessToken: "cli-access-1", refreshToken: "rt", expiresAt: 1790000000000, subscriptionType: "pro" },
+  }))
+  assert.deepEqual(resolveClaudeCliCredential(file), { token: "cli-access-1", expires: 1790000000000 })
+})
+
+test("resolveClaudeCliCredential tolerates the flat shape and ignores API-key/malformed files", () => {
+  const dir = mkdtempSync(join(tmpdir(), "claude-flat-"))
+  const flat = join(dir, "flat.json")
+  writeFileSync(flat, JSON.stringify({ accessToken: "flat-token" }))
+  assert.deepEqual(resolveClaudeCliCredential(flat), { token: "flat-token", expires: null })
+  const apiKeyOnly = join(dir, "api.json")
+  writeFileSync(apiKeyOnly, JSON.stringify({ apiKey: "sk-ant-secret" }))
+  assert.equal(resolveClaudeCliCredential(apiKeyOnly), null)
+  const malformed = join(dir, "malformed.json")
+  writeFileSync(malformed, "not-json{{{")
+  assert.equal(resolveClaudeCliCredential(malformed), null)
+  assert.equal(resolveClaudeCliCredential(join(dir, "missing.json")), null)
+})
+
+test("claudeCliCredentialPath honors CLAUDE_CONFIG_DIR", () => {
+  const previous = process.env.CLAUDE_CONFIG_DIR
+  try {
+    process.env.CLAUDE_CONFIG_DIR = join(tmpdir(), "claude-home-test")
+    assert.equal(claudeCliCredentialPath(), join(tmpdir(), "claude-home-test", ".credentials.json"))
+  } finally {
+    if (previous === undefined) delete process.env.CLAUDE_CONFIG_DIR
+    else process.env.CLAUDE_CONFIG_DIR = previous
+  }
+})
+
+test("isClaudeAuthError flags auth rejections only", () => {
+  assert.equal(isClaudeAuthError(new Error("Claude session expired - re-authenticate with Claude Code")), true)
+  assert.equal(isClaudeAuthError(new Error("Anthropic API error: 401")), true)
+  assert.equal(isClaudeAuthError(new Error("Anthropic API error: 403")), true)
+  assert.equal(isClaudeAuthError(new Error("Anthropic API error: 500")), false)
+  assert.equal(isClaudeAuthError(new Error("Claude rate limited - retrying later")), false)
+})
+
+const claudeLegacyPayload = {
+  five_hour: { utilization: 10, resets_at: "2026-08-23T18:00:00Z" },
+  seven_day: { utilization: 20, resets_at: "2026-08-25T00:00:00Z" },
+}
+
+test("claude uses the Claude Code credential when OpenCode has none (native Claude Agent)", async () => {
+  const seen: string[] = []
+  const fetchImpl = (async (_url: string, init?: RequestInit) => {
+    seen.push(String((init?.headers as Record<string, string> | undefined)?.Authorization ?? ""))
+    return { ok: true, status: 200, json: async () => claudeLegacyPayload, text: async () => "{}" } as Response
+  }) as unknown as typeof fetch
+  const result = await checkProviderUsage(
+    "claude",
+    fetchImpl,
+    fakeCredential(null),
+    () => null,
+    () => ({ token: "cli-token", expires: null }),
+  )
+  assert.equal(result.configured, true)
+  assert.equal(result.ok, true)
+  assert.deepEqual(seen, ["Bearer cli-token"])
+  assert.deepEqual(result.windows?.map(w => w.label), ["5h", "7d"])
+})
+
+test("claude retries with the Claude Code credential after a stored-token 401", async () => {
+  const seen: string[] = []
+  const fetchImpl = (async (_url: string, init?: RequestInit) => {
+    const auth = String((init?.headers as Record<string, string> | undefined)?.Authorization ?? "")
+    seen.push(auth)
+    if (auth === "Bearer stale-opencode-token") {
+      return { ok: false, status: 401, json: async () => ({}), text: async () => "{}" } as Response
+    }
+    return { ok: true, status: 200, json: async () => claudeLegacyPayload, text: async () => "{}" } as Response
+  }) as unknown as typeof fetch
+  const result = await checkProviderUsage(
+    "claude",
+    fetchImpl,
+    fakeCredential("stale-opencode-token"),
+    () => null,
+    () => ({ token: "cli-token", expires: null }),
+  )
+  assert.equal(result.ok, true)
+  assert.deepEqual(seen, ["Bearer stale-opencode-token", "Bearer cli-token"])
+})
 
 test("parseKimiUsage derives weekly + rate-limit windows from used or remaining", () => {
   const windows = parseKimiUsage({

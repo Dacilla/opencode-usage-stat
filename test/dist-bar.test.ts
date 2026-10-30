@@ -6,6 +6,8 @@ import {
   providerRowLayout,
   providerHeaderFit,
   providerBarWidth,
+  providerLabelWidth,
+  PROVIDER_LABEL_MIN_WIDTH,
   PROVIDER_SUFFIX_USED,
   PROVIDER_SUFFIX_REMAINING,
   PROVIDER_SUFFIX_PACE,
@@ -239,6 +241,16 @@ test("provider gutter aligns bars; per-provider width is the max that fits", () 
   }
   // Second line (gutter indent + longest reset) always fits.
   assert.ok(gutter + visualWidth("↻ 25d 11h") <= PROVIDER_BODY(38))
+})
+
+test("providerLabelWidth applies a shared floor so short-label providers align", () => {
+  assert.equal(PROVIDER_LABEL_MIN_WIDTH, 9)
+  // Claude's 5h/7d-only rows pad to the same gutter as OpenCode Go / Codex.
+  assert.equal(providerLabelWidth(["5h: ", "7d: "]), 9)
+  assert.equal(providerLabelWidth(["Rolling: ", "Weekly: ", "Monthly: "]), 9)
+  assert.equal(providerLabelWidth(["5h: ", "7d: ", "Credits: "]), 9)
+  // A genuinely longer label still wins over the floor.
+  assert.equal(providerLabelWidth(["Rate Limit (5h): "]), 17)
 })
 
 test("solidBar paints whole cells only: no background-showing glyphs", () => {

@@ -1517,9 +1517,37 @@ function isCodexAuthError(err) {
   const message = err instanceof Error ? err.message : String(err ?? "");
   return /session expired|unauthorized|authenticate|401|403/i.test(message);
 }
-var CLAUDE_ALIASES = ["anthropic", "claude"];
+var CLAUDE_ALIASES = ["anthropic", "claude", "claude-agent"];
 var CLAUDE_ENV_KEYS = [];
 var CLAUDE_URL = "https://api.anthropic.com/api/oauth/usage";
+function claudeCliCredentialPath() {
+  const override = process.env.CLAUDE_CONFIG_DIR?.trim();
+  if (override) return join4(override, ".credentials.json");
+  return join4(homedir4(), ".claude", ".credentials.json");
+}
+function resolveClaudeCliCredential(path = claudeCliCredentialPath()) {
+  try {
+    if (!existsSync4(path)) return null;
+    const raw = readFileSync4(path, "utf8").trim();
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== "object") return null;
+    const root = data;
+    const oauth = root.claudeAiOauth && typeof root.claudeAiOauth === "object" ? root.claudeAiOauth : null;
+    const token = nonEmptyString(
+      oauth?.accessToken ?? oauth?.access_token ?? root.accessToken ?? root.access_token
+    );
+    if (!token) return null;
+    const expiry = toNumber(oauth?.expiresAt ?? root.expiresAt);
+    return { token, expires: expiry };
+  } catch {
+    return null;
+  }
+}
+function isClaudeAuthError(err) {
+  const message = err instanceof Error ? err.message : String(err ?? "");
+  return /session expired|unauthorized|authenticate|401|403/i.test(message);
+}
 function parseClaudeUsage(payload) {
   const data = asObject(payload);
   if (!data) return [];
@@ -2596,7 +2624,7 @@ function isOverPace(win, nowMs = Date.now()) {
   const pace = windowPacePercent(win, nowMs);
   return win.percent != null && pace != null && win.percent > pace;
 }
-async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential = defaultCredentialResolver, getCodexCliCredential = resolveCodexCliCredential) {
+async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential = defaultCredentialResolver, getCodexCliCredential = resolveCodexCliCredential, getClaudeCliCredential = resolveClaudeCliCredential) {
   const spec = PROVIDERS.find((p) => p.id === providerId);
   if (!spec) return { providerId, providerName: providerId, configured: false, ok: false, status: "Unknown provider" };
   const finishError = (configured, message) => ({
@@ -2663,6 +2691,16 @@ async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential =
       return finishError(true, err instanceof Error ? err.message : "Request failed");
     }
   }
+  if (!secret && spec.id === "claude") {
+    const cli = getClaudeCliCredential();
+    if (!cli?.token) return finishError(false, "not configured");
+    try {
+      const windows = await fetchClaudeUsage(cli.token, fetchImpl);
+      return { providerId: spec.id, providerName: spec.name, configured: true, ok: true, status: summarize(spec.name, windows), windows };
+    } catch (err) {
+      return finishError(true, err instanceof Error ? err.message : "Request failed");
+    }
+  }
   if (!secret) {
     return finishError(false, "not configured");
   }
@@ -2701,9 +2739,27 @@ async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential =
         windows = codexWindows;
         break;
       }
-      case "claude":
-        windows = await fetchClaudeUsage(secret, fetchImpl);
+      case "claude": {
+        const candidates = [secret];
+        const cli = getClaudeCliCredential();
+        if (cli?.token && cli.token !== secret) candidates.push(cli.token);
+        let claudeWindows = null;
+        let lastErr = null;
+        for (const candidate of candidates) {
+          try {
+            claudeWindows = await fetchClaudeUsage(candidate, fetchImpl);
+            lastErr = null;
+            break;
+          } catch (err) {
+            lastErr = err;
+            const isLast = candidate === candidates[candidates.length - 1];
+            if (isLast || !isClaudeAuthError(err)) throw err;
+          }
+        }
+        if (!claudeWindows) throw lastErr;
+        windows = claudeWindows;
         break;
+      }
       case "kimi-for-coding":
         windows = await fetchKimiUsage(secret, fetchImpl);
         break;
@@ -3645,6 +3701,12 @@ function distBarWidth(contentWidth, prefixWidth, suffix, showTrend) {
 }
 var PROVIDER_BAR_MIN = 5;
 var PROVIDER_BAR_MAX = 20;
+var PROVIDER_LABEL_MIN_WIDTH = 9;
+function providerLabelWidth(labels, minWidth = PROVIDER_LABEL_MIN_WIDTH) {
+  let width = minWidth;
+  for (const label of labels) width = Math.max(width, visualWidth(label));
+  return width;
+}
 var PROVIDER_SUFFIX_USED = 7;
 var PROVIDER_SUFFIX_REMAINING = 12;
 var PROVIDER_SUFFIX_PACE = 6;
@@ -4087,11 +4149,7 @@ function ProviderUsageBlocks(props) {
             }
             return raw;
           };
-          const labelWidth = () => {
-            let m = 0;
-            for (const w of state.result?.windows ?? []) m = Math.max(m, visualWidth(`${displayLabel(w.label)}: `));
-            return m;
-          };
+          const labelWidth = () => providerLabelWidth((state.result?.windows ?? []).map((w) => `${displayLabel(w.label)}: `));
           const suffixBudget = () => (displayMode() === "remaining" ? PROVIDER_SUFFIX_REMAINING : PROVIDER_SUFFIX_USED) + (showPace() ? PROVIDER_SUFFIX_PACE : 0);
           const minContentWidth = () => panelWidth() - BODY_INSET - (state.id === "droid" ? 1 : 0);
           const barWidth = () => providerBarWidth(minContentWidth(), labelWidth(), suffixBudget());

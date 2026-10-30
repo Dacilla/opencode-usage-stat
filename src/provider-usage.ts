@@ -5,7 +5,10 @@
 //   - deepseek      GET https://api.deepseek.com/user/balance (API key)
 //   - codex         GET https://chatgpt.com/backend-api/wham/usage (OAuth token)
 //   - claude        GET https://api.anthropic.com/api/oauth/usage (OAuth token,
-//                   anthropic-beta: oauth-2025-04-20) -> 5h / 7d windows
+//                   anthropic-beta: oauth-2025-04-20) -> 5h / 7d windows.
+//                   Reads the OpenCode credential (anthropic/claude/claude-agent)
+//                   and falls back to Claude Code's own OAuth token
+//                   (~/.claude/.credentials.json, honoring CLAUDE_CONFIG_DIR).
 //   - kimi-for-coding  GET https://api.kimi.com/coding/v1/usages (API key)
 //   - zai-coding-plan  GET https://api.z.ai/api/monitor/usage/quota/limit (API key)
 //   - zhipuai-coding-plan GET https://open.bigmodel.cn/api/monitor/usage/quota/limit (API key)
@@ -435,9 +438,58 @@ export function isCodexAuthError(err: unknown): boolean {
 
 // ── Claude Pro / Max ──
 
-export const CLAUDE_ALIASES = ["anthropic", "claude"]
+// `claude-agent` is OpenCode 2's native Claude Code login. It stores an
+// `external` credential with no token, so the CLI file fallback below is what
+// actually supplies the OAuth access token in that setup.
+export const CLAUDE_ALIASES = ["anthropic", "claude", "claude-agent"]
 export const CLAUDE_ENV_KEYS: string[] = [] // subscription quota needs the Claude Code OAuth access token
 export const CLAUDE_URL = "https://api.anthropic.com/api/oauth/usage"
+
+export interface ClaudeCliCredential {
+  token: string
+  expires: number | null
+}
+
+/** Claude Code credential file (~/.claude/.credentials.json, honoring CLAUDE_CONFIG_DIR). */
+export function claudeCliCredentialPath(): string {
+  const override = process.env.CLAUDE_CONFIG_DIR?.trim()
+  if (override) return join(override, ".credentials.json")
+  return join(homedir(), ".claude", ".credentials.json")
+}
+
+/**
+ * Read Claude Code's own OAuth credential ({ claudeAiOauth: { accessToken,
+ * expiresAt } }, tolerating a flat shape). API-key-only / external logins are
+ * ignored: only an OAuth access token can query the usage endpoint. Secrets are
+ * never logged - callers receive the token in memory only.
+ */
+export function resolveClaudeCliCredential(path: string = claudeCliCredentialPath()): ClaudeCliCredential | null {
+  try {
+    if (!existsSync(path)) return null
+    const raw = readFileSync(path, "utf8").trim()
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (!data || typeof data !== "object") return null
+    const root = data as Record<string, unknown>
+    const oauth = root.claudeAiOauth && typeof root.claudeAiOauth === "object"
+      ? root.claudeAiOauth as Record<string, unknown>
+      : null
+    const token = nonEmptyString(
+      oauth?.accessToken ?? oauth?.access_token ?? root.accessToken ?? root.access_token,
+    )
+    if (!token) return null
+    const expiry = toNumber(oauth?.expiresAt ?? root.expiresAt)
+    return { token, expires: expiry }
+  } catch {
+    return null
+  }
+}
+
+/** True when an error looks like an Anthropic OAuth rejection (worth retrying with the CLI token). */
+export function isClaudeAuthError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? "")
+  return /session expired|unauthorized|authenticate|401|403/i.test(message)
+}
 
 interface ClaudeLimit {
   kind?: string
@@ -1823,6 +1875,7 @@ export async function checkProviderUsage(
   fetchImpl: FetchLike = fetch,
   getCredential: CredentialResolver = defaultCredentialResolver,
   getCodexCliCredential: () => CodexCliCredential | null = resolveCodexCliCredential,
+  getClaudeCliCredential: () => ClaudeCliCredential | null = resolveClaudeCliCredential,
 ): Promise<ProviderUsageResult> {
   const spec = PROVIDERS.find(p => p.id === providerId)
   if (!spec) return { providerId, providerName: providerId, configured: false, ok: false, status: "Unknown provider" }
@@ -1902,6 +1955,18 @@ export async function checkProviderUsage(
       return finishError(true, err instanceof Error ? err.message : "Request failed")
     }
   }
+  if (!secret && spec.id === "claude") {
+    // No OpenCode credential: the native Claude Agent integration stores only
+    // an `external` marker, so read Claude Code's OAuth token directly.
+    const cli = getClaudeCliCredential()
+    if (!cli?.token) return finishError(false, "not configured")
+    try {
+      const windows = await fetchClaudeUsage(cli.token, fetchImpl)
+      return { providerId: spec.id, providerName: spec.name, configured: true, ok: true, status: summarize(spec.name, windows), windows }
+    } catch (err) {
+      return finishError(true, err instanceof Error ? err.message : "Request failed")
+    }
+  }
   if (!secret) {
     return finishError(false, "not configured")
   }
@@ -1946,9 +2011,30 @@ export async function checkProviderUsage(
         windows = codexWindows
         break
       }
-      case "claude":
-        windows = await fetchClaudeUsage(secret, fetchImpl)
+      case "claude": {
+        // An OpenCode `anthropic` entry may be a plain API key (the usage
+        // endpoint rejects those) or a stale OAuth token; retry with Claude
+        // Code's own credential when the stored one is rejected.
+        const candidates: string[] = [secret]
+        const cli = getClaudeCliCredential()
+        if (cli?.token && cli.token !== secret) candidates.push(cli.token)
+        let claudeWindows: UsageWindow[] | null = null
+        let lastErr: unknown = null
+        for (const candidate of candidates) {
+          try {
+            claudeWindows = await fetchClaudeUsage(candidate, fetchImpl)
+            lastErr = null
+            break
+          } catch (err) {
+            lastErr = err
+            const isLast = candidate === candidates[candidates.length - 1]
+            if (isLast || !isClaudeAuthError(err)) throw err
+          }
+        }
+        if (!claudeWindows) throw lastErr
+        windows = claudeWindows
         break
+      }
       case "kimi-for-coding":
         windows = await fetchKimiUsage(secret, fetchImpl)
         break

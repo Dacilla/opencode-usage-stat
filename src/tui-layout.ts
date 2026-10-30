@@ -82,6 +82,24 @@ export function distBarWidth(contentWidth: number, prefixWidth: number, suffix: 
 export const PROVIDER_BAR_MIN = 5
 export const PROVIDER_BAR_MAX = 20
 
+/**
+ * Shared label-gutter floor. The common quota labels ("Rolling: ", "Monthly: ",
+ * "Credits: ", "Weekly: ") are 8-9 cells wide; padding every provider to at
+ * least this keeps bars in one column across providers instead of shifting
+ * left when a provider only has short labels ("5h: / 7d: ").
+ */
+export const PROVIDER_LABEL_MIN_WIDTH = 9
+
+/**
+ * Gutter width for a provider's rows: its widest label, but never below the
+ * shared floor so short-label providers still line up with the rest.
+ */
+export function providerLabelWidth(labels: readonly string[], minWidth: number = PROVIDER_LABEL_MIN_WIDTH): number {
+  let width = minWidth
+  for (const label of labels) width = Math.max(width, visualWidth(label))
+  return width
+}
+
 /** Line-1 suffix budgets (worst case) so per-provider bar widths stay stable
  * as numbers change: " 100.0%", " 100.0% left", " │100%". */
 export const PROVIDER_SUFFIX_USED = 7

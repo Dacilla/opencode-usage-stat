@@ -11,9 +11,11 @@
  * Errors / unconfigured states never leak secrets.
  *
  * Row geometry is fixed per provider, not fitted per row: every window label
- * in a provider pads to one gutter so all bars start in the same column and
- * share one width — the widest the budget allows, since cells are atomic and
- * width is granularity. The reset countdown lives on its own dim second
+ * in a provider pads to one gutter so all rows share one width - the widest
+ * the budget allows, since cells are atomic and width is granularity. The
+ * gutter also has a shared floor (PROVIDER_LABEL_MIN_WIDTH) so providers with
+ * only short labels ("5h: / 7d: ") still start their bars in the same column
+ * as "Rolling: / Monthly: / Credits: ". The reset countdown lives on its own dim second
  * line, aligned under the bar start, so rows wrap at one designed break
  * point instead of splitting bars mid-row at a different point each.
  *
@@ -55,8 +57,8 @@ import { t } from "./i18n.js"
 import { formatResetDuration } from "./formatter.js"
 import { resolveThemeColors } from "./theme-map.js"
 import { getSettingsStore, DEFAULT_SETTINGS, optionsToSettings } from "./settings.js"
-import { truncateToWidth, visualWidth, padEndToWidth } from "./text-width.js"
-import { providerHeaderFit, usageLevel, solidBar, providerBarWidth, PROVIDER_SUFFIX_USED, PROVIDER_SUFFIX_REMAINING, PROVIDER_SUFFIX_PACE } from "./tui-layout.js"
+import { truncateToWidth, padEndToWidth } from "./text-width.js"
+import { providerHeaderFit, usageLevel, solidBar, providerBarWidth, providerLabelWidth, PROVIDER_SUFFIX_USED, PROVIDER_SUFFIX_REMAINING, PROVIDER_SUFFIX_PACE } from "./tui-layout.js"
 import type { UsageLevel } from "./tui-layout.js"
 
 const REFRESH_MS = 2 * 60 * 1000 // every 2 minutes
@@ -495,11 +497,8 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
             }
             return raw
           }
-          const labelWidth = (): number => {
-            let m = 0
-            for (const w of state.result?.windows ?? []) m = Math.max(m, visualWidth(`${displayLabel(w.label)}: `))
-            return m
-          }
+          const labelWidth = (): number =>
+            providerLabelWidth((state.result?.windows ?? []).map(w => `${displayLabel(w.label)}: `))
           // Per-provider bar width: the widest bar that fits this provider's
           // gutter + worst-case suffix at the narrowest row indent, shared by
           // every row so bars compare directly, and as wide as the budget

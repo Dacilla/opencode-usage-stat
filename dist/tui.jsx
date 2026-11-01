@@ -656,44 +656,50 @@ var PerfTracker = class {
     this.loadSessions(sessionID ? [sessionID] : []);
   }
   loadSessions(sessionIDs) {
-    this.steps.clear();
-    this.inboxStarts.clear();
-    this.promptStarts.clear();
-    this.messagePromptStarts.clear();
-    this.promptAssociationAttempted.clear();
-    this.settledMessages.clear();
-    this.statsMap.clear();
-    this.ttftSamples.clear();
-    this.tpsSamples.clear();
-    this.latencySamples.clear();
+    this.reset();
+    this.ingestEntries(readPerfEntries(), sessionIDs);
+  }
+  /**
+   * Aggregate already-parsed log entries for the given sessions.
+   *
+   * Split out from `loadSessions` so a caller that has the entries in hand — the
+   * server's cached read — does not touch the filesystem again.
+   */
+  ingestEntries(entries, sessionIDs) {
     const ids = new Set(sessionIDs.filter(Boolean));
     if (ids.size === 0) return;
-    try {
-      if (!existsSync2(resolveLogPath2())) return;
-      const content = readFileSync2(resolveLogPath2(), "utf-8").trim();
-      if (!content) return;
-      const lines = content.split("\n");
-      for (const line of lines) {
-        if (!line) continue;
-        try {
-          const entry = JSON.parse(line);
-          if (entry.schema !== 2 || entry.tps_source !== "step-body-window") continue;
-          if (entry.messageID) this.settledMessages.add(`${entry.sessionID}/${entry.messageID}`);
-          if (ids.has(entry.sessionID)) {
-            this.updateStats(entry.model, {
-              ...entry,
-              ttft_ms: entry.ttft_source === "inbox-enqueued" ? entry.ttft_ms : null,
-              tps: entry.tps,
-              latency_ms: entry.latency_source === "inbox-to-step-streamed" ? entry.latency_ms : null
-            });
-          }
-        } catch {
-        }
-      }
-    } catch {
+    for (const entry of entries) {
+      if (entry.schema !== 2 || entry.tps_source !== "step-body-window") continue;
+      if (entry.messageID) this.settledMessages.add(`${entry.sessionID}/${entry.messageID}`);
+      if (!ids.has(entry.sessionID)) continue;
+      this.updateStats(entry.model, {
+        ...entry,
+        ttft_ms: entry.ttft_source === "inbox-enqueued" ? entry.ttft_ms : null,
+        tps: entry.tps,
+        latency_ms: entry.latency_source === "inbox-to-step-streamed" ? entry.latency_ms : null
+      });
     }
   }
 };
+function readPerfEntries() {
+  try {
+    if (!existsSync2(resolveLogPath2())) return [];
+    const content = readFileSync2(resolveLogPath2(), "utf-8").trim();
+    if (!content) return [];
+    const out = [];
+    for (const line of content.split("\n")) {
+      if (!line) continue;
+      try {
+        const entry = JSON.parse(line);
+        if (entry.schema === 2 && entry.tps_source === "step-body-window") out.push(entry);
+      } catch {
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
 function createPerfTracker() {
   return new PerfTracker();
 }
@@ -23265,6 +23271,22 @@ var ReportResultSchema = external_exports.object({
   bytes: external_exports.number(),
   scope: ReportScopeSchema
 });
+var PerfModelSchema = external_exports.object({
+  key: external_exports.string(),
+  model: external_exports.string(),
+  providerID: external_exports.string(),
+  requestCount: external_exports.number(),
+  avgTTFT: external_exports.number().nullable(),
+  p95TTFT: external_exports.number().nullable(),
+  avgTPS: external_exports.number().nullable(),
+  p95TPS: external_exports.number().nullable(),
+  avgLatency: external_exports.number().nullable(),
+  p95Latency: external_exports.number().nullable()
+});
+var PerfSnapshotSchema = external_exports.object({
+  models: external_exports.array(PerfModelSchema),
+  samples: external_exports.number()
+});
 var Usage = Rpc.define({
   id: "opencode-usage-stat",
   methods: {
@@ -23298,6 +23320,11 @@ var Usage = Rpc.define({
         sessionID: external_exports.string().optional()
       }),
       output: ReportResultSchema
+    },
+    /** TTFT/TPS/latency for a session family, from the persisted perf log. */
+    perf: {
+      input: external_exports.object({ sessionIDs: external_exports.array(external_exports.string()) }),
+      output: PerfSnapshotSchema
     }
   },
   events: {

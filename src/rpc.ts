@@ -63,6 +63,24 @@ export const ReportResultSchema = z.object({
   scope: ReportScopeSchema,
 })
 
+export const PerfModelSchema = z.object({
+  key: z.string(),
+  model: z.string(),
+  providerID: z.string(),
+  requestCount: z.number(),
+  avgTTFT: z.number().nullable(),
+  p95TTFT: z.number().nullable(),
+  avgTPS: z.number().nullable(),
+  p95TPS: z.number().nullable(),
+  avgLatency: z.number().nullable(),
+  p95Latency: z.number().nullable(),
+})
+
+export const PerfSnapshotSchema = z.object({
+  models: z.array(PerfModelSchema),
+  samples: z.number(),
+})
+
 export const Usage = Rpc.define({
   id: "opencode-usage-stat",
   methods: {
@@ -97,6 +115,11 @@ export const Usage = Rpc.define({
       }),
       output: ReportResultSchema,
     },
+    /** TTFT/TPS/latency for a session family, from the persisted perf log. */
+    perf: {
+      input: z.object({ sessionIDs: z.array(z.string()) }),
+      output: PerfSnapshotSchema,
+    },
   },
   events: {
     reportCreated: {
@@ -120,3 +143,5 @@ export type ProviderResult = z.infer<typeof ProviderResultSchema>
 export type ReportScope = z.infer<typeof ReportScopeSchema>
 export type ReportFormat = z.infer<typeof ReportFormatSchema>
 export type ReportResult = z.infer<typeof ReportResultSchema>
+export type PerfModel = z.infer<typeof PerfModelSchema>
+export type PerfSnapshot = z.infer<typeof PerfSnapshotSchema>

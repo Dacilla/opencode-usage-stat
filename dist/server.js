@@ -219,12 +219,12 @@ function fetchAndCachePricing() {
         };
       }
     }
-    const cache2 = {
+    const cache3 = {
       fetchedAt: (/* @__PURE__ */ new Date()).toISOString(),
       models
     };
-    writeFileSync(PRICING_PATH, JSON.stringify(cache2), "utf-8");
-    return cache2;
+    writeFileSync(PRICING_PATH, JSON.stringify(cache3), "utf-8");
+    return cache3;
   } catch {
     return loadCachedPricing();
   }
@@ -614,13 +614,13 @@ function openReadonlyDb(path) {
     }
     const { DatabaseSync } = require2("node:sqlite");
     const db = new DatabaseSync(path, { readOnly: true });
-    const cache2 = /* @__PURE__ */ new Map();
+    const cache3 = /* @__PURE__ */ new Map();
     return {
       all: (sql, params = []) => {
-        let stmt = cache2.get(sql);
+        let stmt = cache3.get(sql);
         if (!stmt) {
           stmt = db.prepare(sql);
-          cache2.set(sql, stmt);
+          cache3.set(sql, stmt);
         }
         return stmt.all(...params);
       },
@@ -2278,9 +2278,9 @@ function assertNever(_x) {
 }
 function assert(_) {
 }
-function getEnumValues(entries) {
-  const numericValues = Object.values(entries).filter((v) => typeof v === "number");
-  const values = Object.entries(entries).filter(([k, _]) => numericValues.indexOf(+k) === -1).map(([_, v]) => v);
+function getEnumValues(entries2) {
+  const numericValues = Object.values(entries2).filter((v) => typeof v === "number");
+  const values = Object.entries(entries2).filter(([k, _]) => numericValues.indexOf(+k) === -1).map(([_, v]) => v);
   return values;
 }
 function joinValues(array2, separator2 = "|") {
@@ -4115,16 +4115,16 @@ var $ZodCheckProperties = /* @__PURE__ */ $constructor("$ZodCheckProperties", (i
   hide(inst, Symbol.iterator, function* () {
     yield inst;
   });
-  let entries;
+  let entries2;
   inst._zod.check = (payload) => {
     if (payload.value == null) {
       payload.issues.push({ expected: "object", code: "invalid_type", input: payload.value, inst });
       return void 0;
     }
-    entries ?? (entries = Reflect.ownKeys(def.shape).map((key) => [key, def.shape[key]]));
+    entries2 ?? (entries2 = Reflect.ownKeys(def.shape).map((key) => [key, def.shape[key]]));
     const input2 = payload.value;
     let proms;
-    for (const [key, schema] of entries) {
+    for (const [key, schema] of entries2) {
       const result = schema._zod.run({ value: input2[key], issues: [] }, {});
       if (result instanceof Promise) {
         proms ?? (proms = []);
@@ -16942,18 +16942,18 @@ function _set(Class2, valueType, params) {
 }
 // @__NO_SIDE_EFFECTS__
 function _enum(Class2, values, params) {
-  const entries = Array.isArray(values) ? Object.fromEntries(values.map((v) => [v, v])) : values;
+  const entries2 = Array.isArray(values) ? Object.fromEntries(values.map((v) => [v, v])) : values;
   return new Class2({
     type: "enum",
-    entries,
+    entries: entries2,
     ...normalizeParams(params)
   });
 }
 // @__NO_SIDE_EFFECTS__
-function _nativeEnum(Class2, entries, params) {
+function _nativeEnum(Class2, entries2, params) {
   return new Class2({
     type: "enum",
-    entries,
+    entries: entries2,
     ...normalizeParams(params)
   });
 }
@@ -19936,17 +19936,17 @@ var ZodEnum = /* @__PURE__ */ $constructor("ZodEnum", (inst, def) => {
   };
 });
 function _enum2(values, params) {
-  const entries = Array.isArray(values) ? Object.fromEntries(values.map((v) => [v, v])) : values;
+  const entries2 = Array.isArray(values) ? Object.fromEntries(values.map((v) => [v, v])) : values;
   return new ZodEnum({
     type: "enum",
-    entries,
+    entries: entries2,
     ...util_exports.normalizeParams(params)
   });
 }
-function nativeEnum(entries, params) {
+function nativeEnum(entries2, params) {
   return new ZodEnum({
     type: "enum",
-    entries,
+    entries: entries2,
     ...util_exports.normalizeParams(params)
   });
 }
@@ -21104,21 +21104,21 @@ function visit(schema, fnOrHandlers) {
     const h = fnOrHandlers[node2._zod.def.type];
     return h ? h(node2, rewritten) : node2;
   };
-  const cache2 = /* @__PURE__ */ new Map();
+  const cache3 = /* @__PURE__ */ new Map();
   function run(s) {
-    const cached2 = cache2.get(s);
+    const cached2 = cache3.get(s);
     if (cached2 === RESOLVING) {
       return new $ZodLazy({
         type: "lazy",
-        getter: () => cache2.get(s)
+        getter: () => cache3.get(s)
       });
     }
     if (cached2 !== void 0)
       return cached2;
-    cache2.set(s, RESOLVING);
+    cache3.set(s, RESOLVING);
     const inner = mapInner(s);
     const mapped = fn(inner, inner !== s);
-    cache2.set(s, mapped);
+    cache3.set(s, mapped);
     return mapped;
   }
   function mapInner(s) {
@@ -21366,6 +21366,22 @@ var ReportResultSchema = external_exports.object({
   bytes: external_exports.number(),
   scope: ReportScopeSchema
 });
+var PerfModelSchema = external_exports.object({
+  key: external_exports.string(),
+  model: external_exports.string(),
+  providerID: external_exports.string(),
+  requestCount: external_exports.number(),
+  avgTTFT: external_exports.number().nullable(),
+  p95TTFT: external_exports.number().nullable(),
+  avgTPS: external_exports.number().nullable(),
+  p95TPS: external_exports.number().nullable(),
+  avgLatency: external_exports.number().nullable(),
+  p95Latency: external_exports.number().nullable()
+});
+var PerfSnapshotSchema = external_exports.object({
+  models: external_exports.array(PerfModelSchema),
+  samples: external_exports.number()
+});
 var Usage = Rpc.define({
   id: "opencode-usage-stat",
   methods: {
@@ -21399,6 +21415,11 @@ var Usage = Rpc.define({
         sessionID: external_exports.string().optional()
       }),
       output: ReportResultSchema
+    },
+    /** TTFT/TPS/latency for a session family, from the persisted perf log. */
+    perf: {
+      input: external_exports.object({ sessionIDs: external_exports.array(external_exports.string()) }),
+      output: PerfSnapshotSchema
     }
   },
   events: {
@@ -23013,53 +23034,21 @@ function providerCatalog(options, settings) {
   }));
 }
 
-// src/report-file.ts
-import { existsSync as existsSync5, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync as writeFileSync2 } from "node:fs";
-import { homedir as homedir5 } from "node:os";
-import { join as join5 } from "node:path";
-var REPORT_PREFIX = "usage-stat-";
-var MAX_REPORTS = 50;
-function ensureReportDir() {
-  const dir = join5(homedir5(), ".opencode", "reports");
-  if (!existsSync5(dir)) mkdirSync(dir, { recursive: true });
-  return dir;
-}
-function cleanupOldReports(dir) {
-  try {
-    const files = readdirSync(dir).filter((file2) => file2.startsWith(REPORT_PREFIX) && /\.(html|txt|json)$/.test(file2)).map((file2) => ({ path: join5(dir, file2), mtime: statSync(join5(dir, file2)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
-    for (const file2 of files.slice(MAX_REPORTS)) {
-      try {
-        unlinkSync(file2.path);
-      } catch {
-      }
-    }
-  } catch {
-  }
-}
-function dateTimeStamp(now = /* @__PURE__ */ new Date()) {
-  const pad = (value) => String(value).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-}
-function writeReportFile(kind, ext, content) {
-  const dir = ensureReportDir();
-  const filePath = join5(dir, `${REPORT_PREFIX}${kind}-${dateTimeStamp()}.${ext}`);
-  writeFileSync2(filePath, content, "utf-8");
-  cleanupOldReports(dir);
-  return filePath;
-}
+// src/server/perf.ts
+import { statSync as statSync2 } from "node:fs";
 
 // src/perf-tracker.ts
-import { appendFileSync, readFileSync as readFileSync5, writeFileSync as writeFileSync4 } from "node:fs";
-import { join as join7 } from "node:path";
-import { homedir as homedir7 } from "node:os";
-import { existsSync as existsSync7, statSync as statSync2 } from "node:fs";
-
-// src/stats-store.ts
-import { readFileSync as readFileSync4, writeFileSync as writeFileSync3, existsSync as existsSync6 } from "node:fs";
+import { appendFileSync, readFileSync as readFileSync5, writeFileSync as writeFileSync3 } from "node:fs";
 import { join as join6 } from "node:path";
 import { homedir as homedir6 } from "node:os";
-var DEFAULT_STATS_PATH = join6(homedir6(), ".opencode", "usage-stat-stats.json");
-var DEFAULT_LOG_PATH = join6(homedir6(), ".opencode", "usage-stat.jsonl");
+import { existsSync as existsSync6, statSync } from "node:fs";
+
+// src/stats-store.ts
+import { readFileSync as readFileSync4, writeFileSync as writeFileSync2, existsSync as existsSync5 } from "node:fs";
+import { join as join5 } from "node:path";
+import { homedir as homedir5 } from "node:os";
+var DEFAULT_STATS_PATH = join5(homedir5(), ".opencode", "usage-stat-stats.json");
+var DEFAULT_LOG_PATH = join5(homedir5(), ".opencode", "usage-stat.jsonl");
 var statsPath = null;
 var logPath = null;
 function resolveStatsPath() {
@@ -23072,7 +23061,7 @@ var RESERVOIR_SIZE = 500;
 var CURRENT_VERSION = 2;
 function loadStatsFile() {
   try {
-    if (!existsSync6(resolveStatsPath())) {
+    if (!existsSync5(resolveStatsPath())) {
       return { version: CURRENT_VERSION, updatedAt: "", migratedFromLogs: false, models: {} };
     }
     const content = readFileSync4(resolveStatsPath(), "utf-8");
@@ -23085,7 +23074,7 @@ function loadStatsFile() {
 function saveStatsFile(file2) {
   try {
     file2.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    writeFileSync3(resolveStatsPath(), JSON.stringify(file2), "utf-8");
+    writeFileSync2(resolveStatsPath(), JSON.stringify(file2), "utf-8");
   } catch {
   }
 }
@@ -23169,7 +23158,7 @@ function applyEntryToModels(models, entry) {
 }
 function migrateFromLogsIfNeeded(file2) {
   if (file2.migratedFromLogs) return false;
-  if (!existsSync6(resolveLogPath())) {
+  if (!existsSync5(resolveLogPath())) {
     file2.migratedFromLogs = true;
     return true;
   }
@@ -23273,7 +23262,7 @@ function readPersistedStats() {
 }
 
 // src/perf-tracker.ts
-var DEFAULT_LOG_PATH2 = join7(homedir7(), ".opencode", "usage-stat.jsonl");
+var DEFAULT_LOG_PATH2 = join6(homedir6(), ".opencode", "usage-stat.jsonl");
 var logPath2 = null;
 function resolveLogPath2() {
   return logPath2 ?? DEFAULT_LOG_PATH2;
@@ -23416,9 +23405,9 @@ var PerfTracker = class {
     try {
       const MAX_SIZE = 5 * 1024 * 1024;
       const KEEP_LINES = 2e3;
-      if (existsSync7(resolveLogPath2()) && statSync2(resolveLogPath2()).size > MAX_SIZE) {
+      if (existsSync6(resolveLogPath2()) && statSync(resolveLogPath2()).size > MAX_SIZE) {
         const lines = readFileSync5(resolveLogPath2(), "utf-8").trim().split("\n");
-        writeFileSync4(resolveLogPath2(), lines.slice(-KEEP_LINES).join("\n") + "\n");
+        writeFileSync3(resolveLogPath2(), lines.slice(-KEEP_LINES).join("\n") + "\n");
       }
       appendFileSync(resolveLogPath2(), JSON.stringify(entry) + "\n");
     } catch {
@@ -23555,16 +23544,16 @@ var PerfTracker = class {
   }
   readLogs(last = 50) {
     try {
-      if (!existsSync7(resolveLogPath2())) return [];
+      if (!existsSync6(resolveLogPath2())) return [];
       const content = readFileSync5(resolveLogPath2(), "utf-8").trim();
       if (!content) return [];
       const lines = content.split("\n");
-      const entries = [];
-      for (let i = lines.length - 1; i >= 0 && entries.length < last; i--) {
+      const entries2 = [];
+      for (let i = lines.length - 1; i >= 0 && entries2.length < last; i--) {
         try {
           const entry = JSON.parse(lines[i]);
           if (entry.schema !== 2 || entry.tps_source !== "step-body-window") continue;
-          entries.push({
+          entries2.push({
             ...entry,
             ttft_ms: entry.ttft_source === "inbox-enqueued" ? entry.ttft_ms : null,
             tps: entry.schema === 2 && entry.tps_source === "step-body-window" ? entry.tps : null,
@@ -23573,7 +23562,7 @@ var PerfTracker = class {
         } catch {
         }
       }
-      return entries.reverse();
+      return entries2.reverse();
     } catch {
       return [];
     }
@@ -23594,47 +23583,129 @@ var PerfTracker = class {
     this.loadSessions(sessionID ? [sessionID] : []);
   }
   loadSessions(sessionIDs) {
-    this.steps.clear();
-    this.inboxStarts.clear();
-    this.promptStarts.clear();
-    this.messagePromptStarts.clear();
-    this.promptAssociationAttempted.clear();
-    this.settledMessages.clear();
-    this.statsMap.clear();
-    this.ttftSamples.clear();
-    this.tpsSamples.clear();
-    this.latencySamples.clear();
+    this.reset();
+    this.ingestEntries(readPerfEntries(), sessionIDs);
+  }
+  /**
+   * Aggregate already-parsed log entries for the given sessions.
+   *
+   * Split out from `loadSessions` so a caller that has the entries in hand — the
+   * server's cached read — does not touch the filesystem again.
+   */
+  ingestEntries(entries2, sessionIDs) {
     const ids = new Set(sessionIDs.filter(Boolean));
     if (ids.size === 0) return;
-    try {
-      if (!existsSync7(resolveLogPath2())) return;
-      const content = readFileSync5(resolveLogPath2(), "utf-8").trim();
-      if (!content) return;
-      const lines = content.split("\n");
-      for (const line of lines) {
-        if (!line) continue;
-        try {
-          const entry = JSON.parse(line);
-          if (entry.schema !== 2 || entry.tps_source !== "step-body-window") continue;
-          if (entry.messageID) this.settledMessages.add(`${entry.sessionID}/${entry.messageID}`);
-          if (ids.has(entry.sessionID)) {
-            this.updateStats(entry.model, {
-              ...entry,
-              ttft_ms: entry.ttft_source === "inbox-enqueued" ? entry.ttft_ms : null,
-              tps: entry.tps,
-              latency_ms: entry.latency_source === "inbox-to-step-streamed" ? entry.latency_ms : null
-            });
-          }
-        } catch {
-        }
-      }
-    } catch {
+    for (const entry of entries2) {
+      if (entry.schema !== 2 || entry.tps_source !== "step-body-window") continue;
+      if (entry.messageID) this.settledMessages.add(`${entry.sessionID}/${entry.messageID}`);
+      if (!ids.has(entry.sessionID)) continue;
+      this.updateStats(entry.model, {
+        ...entry,
+        ttft_ms: entry.ttft_source === "inbox-enqueued" ? entry.ttft_ms : null,
+        tps: entry.tps,
+        latency_ms: entry.latency_source === "inbox-to-step-streamed" ? entry.latency_ms : null
+      });
     }
   }
 };
+function perfLogPath() {
+  return resolveLogPath2();
+}
+function readPerfEntries() {
+  try {
+    if (!existsSync6(resolveLogPath2())) return [];
+    const content = readFileSync5(resolveLogPath2(), "utf-8").trim();
+    if (!content) return [];
+    const out = [];
+    for (const line of content.split("\n")) {
+      if (!line) continue;
+      try {
+        const entry = JSON.parse(line);
+        if (entry.schema === 2 && entry.tps_source === "step-body-window") out.push(entry);
+      } catch {
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+function createPerfTracker() {
+  return new PerfTracker();
+}
 function readLogs(last = 50) {
   const tracker = new PerfTracker();
   return tracker.readLogs(last);
+}
+
+// src/server/perf.ts
+var cache2 = null;
+function entries() {
+  try {
+    const stat = statSync2(perfLogPath());
+    const key = `${stat.mtimeMs}:${stat.size}`;
+    if (cache2 && cache2.key === key) return cache2.entries;
+    const read = readPerfEntries();
+    cache2 = { key, entries: read };
+    return read;
+  } catch {
+    return [];
+  }
+}
+function perfSnapshot(sessionIDs) {
+  if (sessionIDs.length === 0) return { models: [], samples: 0 };
+  const tracker = createPerfTracker();
+  tracker.ingestEntries(entries(), sessionIDs);
+  const stats = tracker.getSessionStats();
+  const models = Object.entries(stats.models).map(([key, model]) => ({
+    key,
+    model: model.model,
+    providerID: model.providerID,
+    requestCount: model.requestCount,
+    avgTTFT: model.avgTTFT,
+    p95TTFT: model.p95TTFT,
+    avgTPS: model.avgTPS,
+    p95TPS: model.p95TPS,
+    avgLatency: model.avgLatency,
+    p95Latency: model.p95Latency
+  }));
+  models.sort((a, b) => b.requestCount - a.requestCount);
+  return { models, samples: stats.totals.totalRequests };
+}
+
+// src/report-file.ts
+import { existsSync as existsSync7, mkdirSync, readdirSync, statSync as statSync3, unlinkSync, writeFileSync as writeFileSync4 } from "node:fs";
+import { homedir as homedir7 } from "node:os";
+import { join as join7 } from "node:path";
+var REPORT_PREFIX = "usage-stat-";
+var MAX_REPORTS = 50;
+function ensureReportDir() {
+  const dir = join7(homedir7(), ".opencode", "reports");
+  if (!existsSync7(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}
+function cleanupOldReports(dir) {
+  try {
+    const files = readdirSync(dir).filter((file2) => file2.startsWith(REPORT_PREFIX) && /\.(html|txt|json)$/.test(file2)).map((file2) => ({ path: join7(dir, file2), mtime: statSync3(join7(dir, file2)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
+    for (const file2 of files.slice(MAX_REPORTS)) {
+      try {
+        unlinkSync(file2.path);
+      } catch {
+      }
+    }
+  } catch {
+  }
+}
+function dateTimeStamp(now = /* @__PURE__ */ new Date()) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+}
+function writeReportFile(kind, ext, content) {
+  const dir = ensureReportDir();
+  const filePath = join7(dir, `${REPORT_PREFIX}${kind}-${dateTimeStamp()}.${ext}`);
+  writeFileSync4(filePath, content, "utf-8");
+  cleanupOldReports(dir);
+  return filePath;
 }
 
 // src/report-formats.ts
@@ -26869,7 +26940,8 @@ async function setup(context) {
     },
     providerConfig: async () => providerCatalog(context.options, await readSettings(context)),
     providers: async ({ ids, force }) => providerSnapshots(ids, force === true),
-    report: async ({ scope, format, sessionID }) => generateReport(scope, format, sessionID)
+    report: async ({ scope, format, sessionID }) => generateReport(scope, format, sessionID),
+    perf: async ({ sessionIDs }) => perfSnapshot(sessionIDs)
   });
   announce = (settings) => registration.events.emit("settingsChanged", settings);
   return async () => {

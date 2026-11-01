@@ -84,6 +84,15 @@ export const panelCss = `
 }
 .ous-bar > span { height: 100%; }
 .ous-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+.ous-perf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: .6;
+}
 .ous-empty { opacity: .55; padding: 20px 0; text-align: center; }
 .ous-foot { opacity: .45; font-size: 11px; }
 .ous-providers {

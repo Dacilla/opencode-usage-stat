@@ -448,46 +448,57 @@ class PerfTracker {
   }
 
   loadSessions(sessionIDs: readonly string[]): void {
-    this.steps.clear()
-    this.inboxStarts.clear()
-    this.promptStarts.clear()
-    this.messagePromptStarts.clear()
-    this.promptAssociationAttempted.clear()
-    this.settledMessages.clear()
-    this.statsMap.clear()
-    this.ttftSamples.clear()
-    this.tpsSamples.clear()
-    this.latencySamples.clear()
+    this.reset()
+    this.ingestEntries(readPerfEntries(), sessionIDs)
+  }
 
+  /**
+   * Aggregate already-parsed log entries for the given sessions.
+   *
+   * Split out from `loadSessions` so a caller that has the entries in hand — the
+   * server's cached read — does not touch the filesystem again.
+   */
+  ingestEntries(entries: readonly LogEntry[], sessionIDs: readonly string[]): void {
     const ids = new Set(sessionIDs.filter(Boolean))
     if (ids.size === 0) return
-
-    try {
-      if (!existsSync(resolveLogPath())) return
-      const content = readFileSync(resolveLogPath(), "utf-8").trim()
-      if (!content) return
-      const lines = content.split("\n")
-      for (const line of lines) {
-        if (!line) continue
-        try {
-          const entry = JSON.parse(line) as LogEntry
-          if (entry.schema !== 2 || entry.tps_source !== "step-body-window") continue
-          if (entry.messageID) this.settledMessages.add(`${entry.sessionID}/${entry.messageID}`)
-          if (ids.has(entry.sessionID)) {
-            this.updateStats(entry.model, {
-              ...entry,
-              ttft_ms: entry.ttft_source === "inbox-enqueued" ? entry.ttft_ms : null,
-              tps: entry.tps,
-              latency_ms: entry.latency_source === "inbox-to-step-streamed" ? entry.latency_ms : null,
-            })
-          }
-        } catch {
-          // Skip malformed lines
-        }
-      }
-    } catch {
-      // Non-critical loading failure
+    for (const entry of entries) {
+      if (entry.schema !== 2 || entry.tps_source !== "step-body-window") continue
+      if (entry.messageID) this.settledMessages.add(`${entry.sessionID}/${entry.messageID}`)
+      if (!ids.has(entry.sessionID)) continue
+      this.updateStats(entry.model, {
+        ...entry,
+        ttft_ms: entry.ttft_source === "inbox-enqueued" ? entry.ttft_ms : null,
+        tps: entry.tps,
+        latency_ms: entry.latency_source === "inbox-to-step-streamed" ? entry.latency_ms : null,
+      })
     }
+  }
+}
+
+/** Absolute path of the JSONL perf log. */
+export function perfLogPath(): string {
+  return resolveLogPath()
+}
+
+/** Read every valid performance entry from the log, skipping malformed lines. */
+export function readPerfEntries(): LogEntry[] {
+  try {
+    if (!existsSync(resolveLogPath())) return []
+    const content = readFileSync(resolveLogPath(), "utf-8").trim()
+    if (!content) return []
+    const out: LogEntry[] = []
+    for (const line of content.split("\n")) {
+      if (!line) continue
+      try {
+        const entry = JSON.parse(line) as LogEntry
+        if (entry.schema === 2 && entry.tps_source === "step-body-window") out.push(entry)
+      } catch {
+        // Skip malformed lines
+      }
+    }
+    return out
+  } catch {
+    return []
   }
 }
 

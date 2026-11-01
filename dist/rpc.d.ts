@@ -96,6 +96,33 @@ export declare const ReportResultSchema: z.ZodObject<{
         days: z.ZodOptional<z.ZodNumber>;
     }, z.core.$strip>;
 }, z.core.$strip>;
+export declare const PerfModelSchema: z.ZodObject<{
+    key: z.ZodString;
+    model: z.ZodString;
+    providerID: z.ZodString;
+    requestCount: z.ZodNumber;
+    avgTTFT: z.ZodNullable<z.ZodNumber>;
+    p95TTFT: z.ZodNullable<z.ZodNumber>;
+    avgTPS: z.ZodNullable<z.ZodNumber>;
+    p95TPS: z.ZodNullable<z.ZodNumber>;
+    avgLatency: z.ZodNullable<z.ZodNumber>;
+    p95Latency: z.ZodNullable<z.ZodNumber>;
+}, z.core.$strip>;
+export declare const PerfSnapshotSchema: z.ZodObject<{
+    models: z.ZodArray<z.ZodObject<{
+        key: z.ZodString;
+        model: z.ZodString;
+        providerID: z.ZodString;
+        requestCount: z.ZodNumber;
+        avgTTFT: z.ZodNullable<z.ZodNumber>;
+        p95TTFT: z.ZodNullable<z.ZodNumber>;
+        avgTPS: z.ZodNullable<z.ZodNumber>;
+        p95TPS: z.ZodNullable<z.ZodNumber>;
+        avgLatency: z.ZodNullable<z.ZodNumber>;
+        p95Latency: z.ZodNullable<z.ZodNumber>;
+    }, z.core.$strip>>;
+    samples: z.ZodNumber;
+}, z.core.$strip>;
 export declare const Usage: {
     readonly id: "opencode-usage-stat";
     readonly methods: {
@@ -230,6 +257,27 @@ export declare const Usage: {
                 }, z.core.$strip>;
             }, z.core.$strip>;
         };
+        /** TTFT/TPS/latency for a session family, from the persisted perf log. */
+        perf: {
+            input: z.ZodObject<{
+                sessionIDs: z.ZodArray<z.ZodString>;
+            }, z.core.$strip>;
+            output: z.ZodObject<{
+                models: z.ZodArray<z.ZodObject<{
+                    key: z.ZodString;
+                    model: z.ZodString;
+                    providerID: z.ZodString;
+                    requestCount: z.ZodNumber;
+                    avgTTFT: z.ZodNullable<z.ZodNumber>;
+                    p95TTFT: z.ZodNullable<z.ZodNumber>;
+                    avgTPS: z.ZodNullable<z.ZodNumber>;
+                    p95TPS: z.ZodNullable<z.ZodNumber>;
+                    avgLatency: z.ZodNullable<z.ZodNumber>;
+                    p95Latency: z.ZodNullable<z.ZodNumber>;
+                }, z.core.$strip>>;
+                samples: z.ZodNumber;
+            }, z.core.$strip>;
+        };
     };
     readonly events: {
         reportCreated: {
@@ -267,3 +315,5 @@ export type ProviderResult = z.infer<typeof ProviderResultSchema>;
 export type ReportScope = z.infer<typeof ReportScopeSchema>;
 export type ReportFormat = z.infer<typeof ReportFormatSchema>;
 export type ReportResult = z.infer<typeof ReportResultSchema>;
+export type PerfModel = z.infer<typeof PerfModelSchema>;
+export type PerfSnapshot = z.infer<typeof PerfSnapshotSchema>;

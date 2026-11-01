@@ -128,7 +128,7 @@ The desktop part adds:
 
 - **Usage panel** in the session side region (tab title, drag to a bottom pane,
   narrow-window view), with live totals per model, cache hit rate, distribution
-  bars, cost, and provider quota rows.
+  bars, cost, provider quota rows, and TTFT/TPS/latency from the perf log.
 - **Composer pill** showing the current session's tokens and cache rate.
 - **`/usage` command** in the palette and the composer slash menu, with
   `mod+shift+u`, plus `/usage settings`, `/usage <days>` and `/usage all`.

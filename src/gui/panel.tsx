@@ -1,8 +1,9 @@
 import type { PanelProps } from "@opencode/plugin/gui"
 import { usePlugin } from "@opencode/plugin/gui"
-import { createMemo, For, Show } from "solid-js"
-import { formatCost, formatTokens } from "../formatter"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import { formatCost, formatDuration, formatTokens } from "../formatter"
 import { messageToTokenMessage, type TokenMessage } from "../token-messages"
+import type { PerfSnapshot } from "../rpc"
 import type { definition } from "./definition"
 import { aggregateModels, cacheStat, overhead, overallCacheRate, sumModels, sumSessions } from "./usage-data"
 import { ProviderUsage } from "./providers"
@@ -20,6 +21,10 @@ function percent(rate: number | null): string {
   return rate == null ? "—" : `${rate.toFixed(1)}%`
 }
 
+function formatTps(value: number | null): string {
+  return value == null ? "—" : value.toFixed(1)
+}
+
 /**
  * Live usage for the session the panel is mounted on.
  *
@@ -31,6 +36,7 @@ export function UsagePanel(props: PanelProps) {
   const ctx = usePlugin<typeof definition>()
   const state = usageState(ctx)
   const showPricing = () => state.settings()?.showPricing ?? true
+  const showPerformance = () => state.settings()?.showPerformance ?? false
 
   const data = () => ctx.servers.get(props.session.server.id)?.data
 
@@ -66,6 +72,32 @@ export function UsagePanel(props: PanelProps) {
   })
   const extra = createMemo(() => overhead(sessionTotals(), messageTotals()))
   const cacheRate = createMemo(() => overallCacheRate(rows()))
+
+  // Performance statistics come from the persisted perf log via the server.
+  // Steps still in flight are not on disk yet; they appear once settled.
+  const [perf, setPerf] = createSignal<PerfSnapshot>()
+  let perfSeq = 0
+
+  async function refreshPerf(): Promise<void> {
+    const ids = family()
+    if (ids.length === 0) return
+    const seq = ++perfSeq
+    try {
+      const snapshot = await state.perf(ids)
+      if (seq === perfSeq) setPerf(snapshot)
+    } catch {
+      // Optional data: keep the last snapshot when the RPC fails.
+    }
+  }
+
+  createEffect(() => {
+    family()
+    void refreshPerf()
+  })
+  const perfTimer = setInterval(() => void refreshPerf(), 15_000)
+  onCleanup(() => clearInterval(perfTimer))
+
+  const perfFor = (key: string) => perf()?.models.find(model => model.key === key)
 
   const collapsed = (key: string) => ctx.stores.view.value.collapsed.includes(key)
 
@@ -169,6 +201,22 @@ export function UsagePanel(props: PanelProps) {
                         <span class="ous-kpi-label">{ctx.t("panel.output")}</span>
                       </div>
                     </div>
+
+                    <Show when={showPerformance() && perfFor(row.key)}>
+                      {(stats) => (
+                        <div class="ous-perf">
+                          <span>
+                            {ctx.t("panel.ttft")} {formatDuration(stats().avgTTFT)}
+                          </span>
+                          <span>
+                            {formatTps(stats().avgTPS)} {ctx.t("panel.tps")}
+                          </span>
+                          <span>
+                            {ctx.t("panel.latency")} {formatDuration(stats().avgLatency)}
+                          </span>
+                        </div>
+                      )}
+                    </Show>
                   </Show>
                 </div>
               )

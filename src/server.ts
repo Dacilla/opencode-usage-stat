@@ -11,6 +11,7 @@ import type { Context } from "@opencode/plugin/promise/plugin"
 import { setV2Client } from "./queries.js"
 import { Usage } from "./rpc.js"
 import { providerSnapshots, providerCatalog } from "./server/providers.js"
+import { perfSnapshot } from "./server/perf.js"
 import { generateReport } from "./server/reports.js"
 import { readSettings, writeSettings } from "./server/settings.js"
 import { createUsageClient } from "./server/usage-client.js"
@@ -32,6 +33,7 @@ export async function setup(context: Context): Promise<() => Promise<void>> {
     providerConfig: async () => providerCatalog(context.options, await readSettings(context)),
     providers: async ({ ids, force }) => providerSnapshots(ids, force === true),
     report: async ({ scope, format, sessionID }) => generateReport(scope, format, sessionID),
+    perf: async ({ sessionIDs }) => perfSnapshot(sessionIDs),
   })
 
   announce = settings => registration.events.emit("settingsChanged", settings)

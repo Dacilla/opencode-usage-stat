@@ -7,6 +7,7 @@ import type { SetupContext } from "@opencode/plugin/gui"
 import { createSignal, type Accessor } from "solid-js"
 import { Usage } from "../rpc"
 import type {
+  PerfSnapshot,
   ProviderConfig,
   ProviderResult,
   ReportFormat,
@@ -28,6 +29,7 @@ export interface UsageState {
   refresh(force?: boolean): Promise<void>
   save(patch: SettingsPatch): Promise<void>
   report(scope: ReportScope, format: ReportFormat, sessionID?: string): Promise<ReportResult>
+  perf(sessionIDs: readonly string[]): Promise<PerfSnapshot>
   dispose(): void
 }
 
@@ -101,6 +103,9 @@ export function createUsageState(ctx: SetupContext<typeof definition>): UsageSta
     },
     report(scope, format, sessionID) {
       return ctx.client.rpc(Usage).report({ scope, format, sessionID })
+    },
+    perf(sessionIDs) {
+      return ctx.client.rpc(Usage).perf({ sessionIDs: [...sessionIDs] })
     },
     dispose() {
       disposed = true

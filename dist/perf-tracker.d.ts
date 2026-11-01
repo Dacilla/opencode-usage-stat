@@ -94,7 +94,18 @@ declare class PerfTracker {
     reset(): void;
     loadSession(sessionID: string): void;
     loadSessions(sessionIDs: readonly string[]): void;
+    /**
+     * Aggregate already-parsed log entries for the given sessions.
+     *
+     * Split out from `loadSessions` so a caller that has the entries in hand — the
+     * server's cached read — does not touch the filesystem again.
+     */
+    ingestEntries(entries: readonly LogEntry[], sessionIDs: readonly string[]): void;
 }
+/** Absolute path of the JSONL perf log. */
+export declare function perfLogPath(): string;
+/** Read every valid performance entry from the log, skipping malformed lines. */
+export declare function readPerfEntries(): LogEntry[];
 export declare function createPerfTracker(): PerfTracker;
 export type { PartEvent, PerfTracker };
 export declare function readLogs(last?: number): LogEntry[];

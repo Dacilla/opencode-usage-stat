@@ -47,6 +47,22 @@ var ReportResultSchema = z.object({
   bytes: z.number(),
   scope: ReportScopeSchema
 });
+var PerfModelSchema = z.object({
+  key: z.string(),
+  model: z.string(),
+  providerID: z.string(),
+  requestCount: z.number(),
+  avgTTFT: z.number().nullable(),
+  p95TTFT: z.number().nullable(),
+  avgTPS: z.number().nullable(),
+  p95TPS: z.number().nullable(),
+  avgLatency: z.number().nullable(),
+  p95Latency: z.number().nullable()
+});
+var PerfSnapshotSchema = z.object({
+  models: z.array(PerfModelSchema),
+  samples: z.number()
+});
 var Usage = Rpc.define({
   id: "opencode-usage-stat",
   methods: {
@@ -80,6 +96,11 @@ var Usage = Rpc.define({
         sessionID: z.string().optional()
       }),
       output: ReportResultSchema
+    },
+    /** TTFT/TPS/latency for a session family, from the persisted perf log. */
+    perf: {
+      input: z.object({ sessionIDs: z.array(z.string()) }),
+      output: PerfSnapshotSchema
     }
   },
   events: {
@@ -96,6 +117,8 @@ var Usage = Rpc.define({
   }
 });
 export {
+  PerfModelSchema,
+  PerfSnapshotSchema,
   ProviderConfigSchema,
   ProviderResultSchema,
   ReportFormatSchema,

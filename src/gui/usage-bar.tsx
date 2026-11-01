@@ -13,7 +13,7 @@ import { usageState } from "./state"
  * bottom of the window. Reads the mounted session from `ctx` when no session is
  * passed in, so the bottom strip follows whatever session is routed.
  */
-export function UsageBar(props: { session?: MountedSession; wide?: boolean }) {
+export function UsageBar(props: { session?: MountedSession }) {
   const ctx = usePlugin<typeof definition>()
   const state = usageState(ctx)
   const usage = createSessionUsage(ctx, () => props.session ?? ctx.sessions.current())
@@ -37,7 +37,7 @@ export function UsageBar(props: { session?: MountedSession; wide?: boolean }) {
 
   return (
     <Show when={total() > 0}>
-      <div class="ous-uibar" classList={{ "ous-uibar-wide": props.wide }}>
+      <div class="ous-uibar">
         <span class="ous-uibar-total" title={ctx.t("panel.total")}>
           {formatTokens(total())}
         </span>
@@ -50,7 +50,6 @@ export function UsageBar(props: { session?: MountedSession; wide?: boolean }) {
           <Show when={cache() != null}>
             {`${(cache() ?? 0).toFixed(0)}% ${ctx.t("panel.cache").toLowerCase()}`}
           </Show>
-          <Show when={props.wide}>{` · ${usage.totals().requests} ${ctx.t("panel.requests").toLowerCase()}`}</Show>
           <Show when={showPricing() && usage.totals().cost > 0}>
             {` · ${formatCost(usage.totals().cost)}`}
           </Show>

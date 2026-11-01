@@ -26,6 +26,7 @@ import { UsageSettings } from "./gui/settings"
 import { usageState } from "./gui/state"
 import { panelCss } from "./gui/style"
 import { UsageBar } from "./gui/usage-bar"
+import { ProviderStrip } from "./gui/provider-strip"
 import { aggregateModels, overallCacheRate, sumSessions } from "./gui/usage-data"
 
 /** Session-level totals and cache rate for the composer pill, from the synced store. */
@@ -111,7 +112,7 @@ export default Plugin.define({
       order: 30,
       render: () => (
         <Show when={surface() === "bottom"}>
-          <UsageBar wide />
+          <ProviderStrip />
         </Show>
       ),
     })

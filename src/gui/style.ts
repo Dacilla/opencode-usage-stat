@@ -105,17 +105,6 @@ export const panelCss = `
   font-variant-numeric: tabular-nums;
   min-width: 0;
 }
-.ous-uibar-wide {
-  padding: 5px 12px;
-  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-  gap: 12px;
-}
-.ous-uibar-wide .ous-uibar-track {
-  width: auto;
-  flex: 1 1 auto;
-  min-width: 80px;
-}
-.ous-uibar-wide .ous-uibar-meta { flex: none; margin-left: auto; }
 .ous-uibar-total { font-weight: 600; white-space: nowrap; }
 .ous-uibar-track {
   display: flex;
@@ -193,4 +182,55 @@ export const panelCss = `
   opacity: .6;
   overflow-wrap: anywhere;
 }
+.ous-pstrip {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 5px 12px;
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ous-pstrip-empty { opacity: .5; }
+.ous-pchip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.ous-pchip:hover .ous-pchip-name { text-decoration: underline; text-underline-offset: 2px; }
+.ous-pchip-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.ous-pchip-track {
+  position: relative;
+  display: block;
+  width: 64px;
+  height: 4px;
+  border-radius: 2px;
+  flex: none;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.ous-pchip-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  transition: width 260ms ease, background-color 260ms ease;
+}
+.ous-pchip-pace {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  border-radius: 1px;
+  transition: left 260ms ease, background-color 260ms ease;
+}
+.ous-pchip-meta { opacity: .6; white-space: nowrap; }
 `

@@ -104,6 +104,23 @@ export const panelCss = `
 .ous-link:disabled { cursor: default; opacity: .35; }
 .ous-provider { display: flex; flex-direction: column; gap: 4px; }
 .ous-window { display: flex; flex-direction: column; gap: 2px; padding-left: 12px; }
+.ous-pbar { position: relative; height: 4px; margin: 5px 0 4px; }
+.ous-pbar-track {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.ous-pbar-track > span { display: block; height: 100%; }
+.ous-pace {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  border-radius: 1px;
+  pointer-events: auto;
+}
 .ous-indent { padding-left: 12px; }
 .ous-settings { display: flex; flex-direction: column; gap: 22px; padding: 4px 0 24px; max-width: 640px; }
 .ous-section-block { display: flex; flex-direction: column; gap: 10px; }

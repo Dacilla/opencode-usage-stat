@@ -319,19 +319,13 @@ export declare function worstUsagePercent(windows: UsageWindow[] | undefined | n
  */
 export declare function collapsedSummary(windows: UsageWindow[] | undefined, mode: UsageDisplayMode): string | null;
 /**
- * On-pace used percentage (0-100) for a window with known start and reset:
- * the share of the quota even pacing would have spent by `nowMs`.
- * Null when the window bounds are missing or invalid.
- */
-export declare function windowPacePercent(win: Pick<UsageWindow, "startsAt" | "resetsAt">, nowMs?: number): number | null;
-/**
  * Marker cell index (0-based) for the pace position inside a bar of `width`
  * cells, oriented to the displayed percentage (used vs remaining).
  * Null when the window has no pace data.
  */
 export declare function paceMarkerIndex(win: Pick<UsageWindow, "startsAt" | "resetsAt">, mode: UsageDisplayMode, width: number, nowMs?: number): number | null;
 /** True when the window's used share has moved past its even-pace budget. */
-export declare function isOverPace(win: Pick<UsageWindow, "percent" | "startsAt" | "resetsAt">, nowMs?: number): boolean;
+export { isOverPace, windowPacePercent } from "./pace.js";
 /**
  * Resolve secret (kept private) and fetch provider usage.
  * `getCredential` is injectable for tests (defaults to the real resolver).

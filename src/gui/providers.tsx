@@ -1,6 +1,8 @@
 import { For, Show, createMemo } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
 import type { ProviderResult, UsageWindow } from "../rpc"
+import { isOverPace, windowPacePercent } from "../pace"
+import { usageLevel } from "../tui-layout"
 import type { definition } from "./definition"
 import { usageState } from "./state"
 
@@ -13,15 +15,30 @@ function worstPercent(provider: ProviderResult): number | null {
   return worst
 }
 
+function levelColor(percent: number | null): string {
+  const level = usageLevel(percent)
+  if (level === "critical") return "#f85149"
+  if (level === "warn") return "#d29922"
+  return "#3fb950"
+}
+
 function tone(percent: number | null): string {
   if (percent == null) return "ous-dot ous-muted"
-  if (percent >= 90) return "ous-dot ous-bad"
-  if (percent >= 70) return "ous-dot ous-warn"
+  const level = usageLevel(percent)
+  if (level === "critical") return "ous-dot ous-bad"
+  if (level === "warn") return "ous-dot ous-warn"
   return "ous-dot ous-ok"
 }
 
 function shown(percent: number, mode: "used" | "remaining"): number {
   return Math.max(0, Math.min(100, mode === "remaining" ? 100 - percent : percent))
+}
+
+/** Pace position on the displayed axis, or null when the window has no bounds. */
+function paceShown(window: UsageWindow, mode: "used" | "remaining"): number | null {
+  const pace = windowPacePercent(window)
+  if (pace == null) return null
+  return mode === "remaining" ? 100 - pace : pace
 }
 
 function resetLabel(window: UsageWindow): string | undefined {
@@ -111,27 +128,53 @@ export function ProviderUsage() {
                     fallback={<div class="ous-muted ous-indent">{provider.error ?? provider.status}</div>}
                   >
                     <For each={provider.windows ?? []}>
-                      {(window) => (
-                        <div class="ous-window">
-                          <div class="ous-line">
-                            <span class="ous-muted">{window.label}</span>
-                            <span class="ous-muted">
-                              {window.valueLabel ?? `${window.percent == null ? "—" : `${Math.round(shown(window.percent, mode()))}%`}`}
-                              <Show when={resetLabel(window)}>
-                                {` · ${ctx.t("providers.resets")} ${resetLabel(window)}`}
+                      {(window) => {
+                        const position = () => shown(window.percent ?? 0, mode())
+                        const pace = () => paceShown(window, mode())
+                        const over = () =>
+                          isOverPace({
+                            percent: window.percent,
+                            startsAt: window.startsAt,
+                            resetsAt: window.resetsAt,
+                          })
+                        return (
+                          <div class="ous-window">
+                            <div class="ous-line">
+                              <span class="ous-muted">{window.label}</span>
+                              <span class="ous-muted">
+                                {window.valueLabel ??
+                                  (window.percent == null ? "—" : `${Math.round(position())}%`)}
+                                <Show when={state.settings()?.showPace && pace() != null}>
+                                  {` │${Math.round(pace() ?? 0)}%`}
+                                </Show>
+                                <Show when={resetLabel(window)}>
+                                  {` · ${ctx.t("providers.resets")} ${resetLabel(window)}`}
+                                </Show>
+                              </span>
+                            </div>
+                            <div class="ous-pbar" aria-hidden="true">
+                              <span class="ous-pbar-track">
+                                <span
+                                  style={{
+                                    width: `${position()}%`,
+                                    "background-color": levelColor(window.percent),
+                                  }}
+                                />
+                              </span>
+                              <Show when={pace() != null}>
+                                <span
+                                  class="ous-pace"
+                                  title={ctx.t("providers.pace")}
+                                  style={{
+                                    left: `${pace()}%`,
+                                    "background-color": over() ? "#f85149" : "#3fb950",
+                                  }}
+                                />
                               </Show>
-                            </span>
+                            </div>
                           </div>
-                          <div class="ous-bar" aria-hidden="true">
-                            <span
-                              style={{
-                                width: `${shown(window.percent ?? 0, mode())}%`,
-                                "background-color": worst != null && worst >= 90 ? "#f85149" : "var(--ous-cache)",
-                              }}
-                            />
-                          </div>
-                        </div>
-                      )}
+                        )
+                      }}
                     </For>
                   </Show>
                 </Show>

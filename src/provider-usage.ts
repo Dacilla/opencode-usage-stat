@@ -40,6 +40,7 @@ import { randomUUID } from "node:crypto"
 import { join } from "node:path"
 import { homedir } from "node:os"
 import { formatResetDuration } from "./formatter.js"
+import { windowPacePercent } from "./pace.js"
 
 /** Relative reset formatting shared with the UI ("5m"/"3h"/"2d"/"now"). */
 export { formatResetDuration as formatReset }
@@ -1831,19 +1832,6 @@ export function collapsedSummary(windows: UsageWindow[] | undefined, mode: Usage
 }
 
 /**
- * On-pace used percentage (0-100) for a window with known start and reset:
- * the share of the quota even pacing would have spent by `nowMs`.
- * Null when the window bounds are missing or invalid.
- */
-export function windowPacePercent(win: Pick<UsageWindow, "startsAt" | "resetsAt">, nowMs: number = Date.now()): number | null {
-  if (!win.startsAt || !win.resetsAt) return null
-  const start = Date.parse(win.startsAt)
-  const end = Date.parse(win.resetsAt)
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null
-  return clampPct(((nowMs - start) / (end - start)) * 100)
-}
-
-/**
  * Marker cell index (0-based) for the pace position inside a bar of `width`
  * cells, oriented to the displayed percentage (used vs remaining).
  * Null when the window has no pace data.
@@ -1861,10 +1849,7 @@ export function paceMarkerIndex(
 }
 
 /** True when the window's used share has moved past its even-pace budget. */
-export function isOverPace(win: Pick<UsageWindow, "percent" | "startsAt" | "resetsAt">, nowMs: number = Date.now()): boolean {
-  const pace = windowPacePercent(win, nowMs)
-  return win.percent != null && pace != null && win.percent > pace
-}
+export { isOverPace, windowPacePercent } from "./pace.js"
 
 /**
  * Resolve secret (kept private) and fetch provider usage.

@@ -1219,6 +1219,24 @@ import { existsSync as existsSync4, readFileSync as readFileSync4 } from "node:f
 import { randomUUID } from "node:crypto";
 import { join as join4 } from "node:path";
 import { homedir as homedir4 } from "node:os";
+
+// src/pace.ts
+function clampPercent(value) {
+  return Math.min(100, Math.max(0, value));
+}
+function windowPacePercent(win, nowMs = Date.now()) {
+  if (!win.startsAt || !win.resetsAt) return null;
+  const start = Date.parse(win.startsAt);
+  const end = Date.parse(win.resetsAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return clampPercent((nowMs - start) / (end - start) * 100);
+}
+function isOverPace(win, nowMs = Date.now()) {
+  const pace = windowPacePercent(win, nowMs);
+  return win.percent != null && pace != null && win.percent > pace;
+}
+
+// src/provider-usage.ts
 var PROVIDER_TIMEOUT_MS = 15e3;
 function fetchWithTimeout(url2, init, fetchImpl, timeoutMs = PROVIDER_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -2612,22 +2630,11 @@ function collapsedSummary(windows, mode) {
   if (firstPercent != null) return `${firstPercent}%`;
   return windows.find((w) => w.valueLabel)?.valueLabel ?? null;
 }
-function windowPacePercent(win, nowMs = Date.now()) {
-  if (!win.startsAt || !win.resetsAt) return null;
-  const start = Date.parse(win.startsAt);
-  const end = Date.parse(win.resetsAt);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
-  return clampPct((nowMs - start) / (end - start) * 100);
-}
 function paceMarkerIndex(win, mode, width, nowMs = Date.now()) {
   const pace = windowPacePercent(win, nowMs);
   if (pace == null || width <= 0) return null;
   const shown = mode === "remaining" ? 100 - pace : pace;
   return Math.max(0, Math.min(width - 1, Math.floor(shown / 100 * width)));
-}
-function isOverPace(win, nowMs = Date.now()) {
-  const pace = windowPacePercent(win, nowMs);
-  return win.percent != null && pace != null && win.percent > pace;
 }
 async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential = defaultCredentialResolver, getCodexCliCredential = resolveCodexCliCredential, getClaudeCliCredential = resolveClaudeCliCredential) {
   const spec = PROVIDERS.find((p) => p.id === providerId);

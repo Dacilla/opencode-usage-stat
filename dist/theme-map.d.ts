@@ -1,4 +1,4 @@
-import type { ResolvedTheme } from "@opencode-ai/theme/tui";
+import type { ResolvedTheme } from "@opencode/theme/tui";
 import { RGBA } from "@opentui/core";
 export interface ThemeColorMap {
     primary: RGBA;

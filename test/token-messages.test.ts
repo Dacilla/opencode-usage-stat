@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import type { OpenCodeClient, SessionMessageInfo } from "@opencode-ai/client"
+import type { OpenCodeClient, SessionMessageInfo } from "@opencode/client"
 import {
   fetchSessionTokenMessages,
   mergeTokenMessages,
@@ -28,7 +28,6 @@ test("full restore follows message cursors across compaction history", async () 
     status: "completed",
     reason: "auto",
     summary: "summary",
-    recent: "",
     time: { created: 206 },
   })
   const calls: Array<{ cursor?: string; order?: "asc" | "desc" }> = []

@@ -3,7 +3,7 @@
 // Usage blocks. Adapted from opencode-tokenwatch (MIT, (c) TTWK).
 import { createSignal, createMemo, createEffect, For, Show, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
-import type { Context } from "@opencode-ai/plugin/tui/context"
+import type { Context } from "@opencode/plugin/tui/context"
 import { RGBA } from "@opentui/core"
 import type { MouseEvent as TuiMouseEvent } from "@opentui/core"
 import { formatTokens, formatCost, formatDuration, isMissingCache, totalInputTokens, cacheHitRate } from "./formatter.js"

@@ -10,7 +10,7 @@
 // the composer pushes its own keymap mode, so a "base" layer's slash command
 // never shows up in prompt completion.
 
-import type { Context } from "@opencode-ai/plugin/tui/context"
+import type { Context } from "@opencode/plugin/tui/context"
 import { getSessionReportInput, setV2Client } from "./queries.js"
 import type { ProgressFn } from "./queries.js"
 import type { CombinedReportData } from "./formatter.js"

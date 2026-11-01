@@ -11,7 +11,7 @@
 // All aggregates below are pure functions over those rows.
 // Adapted from opencode-usage-stat (MIT) and opencode-tokenwatch (MIT, (c) TTWK).
 
-import type { OpenCodeClient, SessionInfo, SessionMessageInfo, SessionMessageAssistant } from "@opencode-ai/client"
+import type { OpenCodeClient, SessionInfo, SessionMessageInfo, SessionMessageAssistant } from "@opencode/client"
 import type {
   AgentBreakdownItem,
   CacheSavings,

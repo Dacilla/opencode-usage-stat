@@ -27,10 +27,10 @@ const external = [
   "@opentui/core/*",
   "@opentui/keymap",
   "@opentui/keymap/*",
-  "@opencode-ai/client",
-  "@opencode-ai/client/*",
-  "@opencode-ai/theme",
-  "@opencode-ai/theme/*",
+  "@opencode/client",
+  "@opencode/client/*",
+  "@opencode/theme",
+  "@opencode/theme/*",
 ]
 
 const solidUniversalPlugin = {

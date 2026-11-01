@@ -1,4 +1,4 @@
-import type { Context } from "@opencode-ai/plugin/tui/context";
+import type { Context } from "@opencode/plugin/tui/context";
 /** Generate and open the HTML report for the current (or given) session. Re-entrant calls only toast. */
 export declare function generateSessionHtmlReport(context: Context, sessionID?: string): Promise<void>;
 export { parseDaysFilter } from "./formatter.js";

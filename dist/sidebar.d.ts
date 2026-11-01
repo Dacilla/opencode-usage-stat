@@ -1,5 +1,5 @@
 import type { JSX } from "solid-js";
-import type { Context } from "@opencode-ai/plugin/tui/context";
+import type { Context } from "@opencode/plugin/tui/context";
 import { formatTokens, formatCost } from "./formatter.js";
 import type { PerfTracker } from "./perf-tracker.js";
 import type { TokenMessage } from "./token-messages.js";

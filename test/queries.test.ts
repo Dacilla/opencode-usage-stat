@@ -21,7 +21,7 @@ import { setUsageDbPathOverride } from "../src/sqlite-source.js"
 import { setPricingCacheForTest } from "../src/pricing.js"
 import type { UsageFilters } from "../src/formatter.js"
 
-// Minimal structural types mirroring the V2 @opencode-ai/client projections.
+// Minimal structural types mirroring the V2 @opencode/client projections.
 interface CachedTokens { read: number; write: number }
 interface Tokens {
   input: number
@@ -54,7 +54,7 @@ interface Sess {
 interface SessionsResponse { data: Sess[]; cursor: { previous?: string | null; next?: string | null } }
 interface SessionMessagesResponse { data: Msg[]; cursor: { previous?: string | null; next?: string | null } }
 
-// ── Mock V2 client (offline; mirrors @opencode-ai/client shapes) ──
+// ── Mock V2 client (offline; mirrors @opencode/client shapes) ──
 
 interface Client {
   session: {

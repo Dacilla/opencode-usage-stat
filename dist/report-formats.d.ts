@@ -1,4 +1,4 @@
-import type { Context } from "@opencode-ai/plugin/tui/context";
+import type { Context } from "@opencode/plugin/tui/context";
 import type { ProgressFn } from "./queries.js";
 import type { UsageFilters, CombinedReportData, ApiCostAnalysis, SessionTokenData, ModelBreakdownItem, MessageRow, ErrorStats, OverheadStats, AgentBreakdownItem, SessionBreakdownItem, ReportSourceMeta } from "./formatter.js";
 export type ReportFormat = "html" | "text" | "json";

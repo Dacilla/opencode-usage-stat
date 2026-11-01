@@ -28,7 +28,7 @@ function fakeContext() {
         ] as const
       },
     },
-  } as unknown as import("@opencode-ai/plugin/tui/context").Context
+  } as unknown as import("@opencode/plugin/tui/context").Context
 }
 
 test("migrateLegacySettings copies legacy language and toggles once", async () => {

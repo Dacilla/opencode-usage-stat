@@ -18,6 +18,7 @@
       "types": "./dist/tui.d.ts",
       "import": "./dist/tui.jsx"
     },
+    "./gui-experimental": "./dist/gui-experimental.cjs",
     "./package.json": "./package.json"
   },
   "files": [
@@ -30,9 +31,12 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc --emitDeclarationOnly && node build.tui.mjs",
+    "build": "npm run build:types && npm run build:tui && npm run build:gui",
+    "build:types": "tsc --emitDeclarationOnly",
+    "build:tui": "node build.tui.mjs",
+    "build:gui": "node build.gui.mjs",
     "render": "node build.render.mjs && node --conditions=browser dist-render/render.mjs",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.gui.json && tsc --noEmit -p tsconfig.test.json",
     "test": "node build.tests.mjs && node --test \"dist-test/*.test.mjs\"",
     "prepublishOnly": "npm run build"
   },
@@ -58,19 +62,22 @@
     "url": "https://github.com/DDwsgood/opencode-usage-stat/issues"
   },
   "dependencies": {
-    "@opentui/core": "0.5.6",
-    "@opentui/solid": "0.5.6",
+    "@opentui/core": "^0.8.1",
+    "@opentui/solid": "^0.8.1",
     "solid-js": "^1.9.0"
   },
   "devDependencies": {
-    "@opencode-ai/client": "0.0.0-beta-17498",
-    "@opencode-ai/plugin": "0.0.0-beta-17498",
-    "@opencode-ai/theme": "0.0.0-beta-17498",
-    "@opentui/keymap": "0.5.6",
+    "@opencode/client": "2.2.5",
+    "@opencode/plugin": "2.2.5",
+    "@opencode/theme": "2.2.5",
+    "@opentui/keymap": "^0.8.1",
     "@types/node": "^24.0.0",
+    "effect": "4.0.6",
     "esbuild": "^0.25.0",
     "esbuild-plugin-solid": "^0.5.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "vite": "^7.0.0",
+    "vite-plugin-solid": "^2.11.0"
   },
   "packageManager": "pnpm@12.10.1+sha512.ba40a37eb1a370d60fea8c4cf1d364c13bcccef518e98ad2bcee954f539d38da37458e58261a3fa55e06523450ea0ffff9f497b135be41f2c15c1642bacace6c"
 }

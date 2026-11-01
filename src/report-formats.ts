@@ -3,7 +3,7 @@
 // session-usage-html.ts; this file only builds structured data and text/JSON
 // summaries, reusing the existing queries/aggregation layer where possible.
 
-import type { Context } from "@opencode-ai/plugin/tui/context"
+import type { Context } from "@opencode/plugin/tui/context"
 import { getPeriodReport } from "./queries.js"
 import type { PeriodReport, ProgressFn } from "./queries.js"
 import type {

@@ -11,7 +11,7 @@
 // shapes ({showPerformance...} and {language}); migrateLegacySettings copies
 // whatever is still there into the new key exactly once.
 
-import type { Context } from "@opencode-ai/plugin/tui/context"
+import type { Context } from "@opencode/plugin/tui/context"
 
 export type UsageDisplayMode = "used" | "remaining"
 export type LanguageSetting = "zh" | "en" | "auto"

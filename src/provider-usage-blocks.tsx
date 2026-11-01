@@ -19,11 +19,11 @@
  * line, aligned under the bar start, so rows wrap at one designed break
  * point instead of splitting bars mid-row at a different point each.
  *
- * V2 API: Context from @opencode-ai/plugin/tui.
+ * V2 API: Context from @opencode/plugin/tui.
  */
 import { createSignal, createEffect, createMemo, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
-import type { Context } from "@opencode-ai/plugin/tui/context"
+import type { Context } from "@opencode/plugin/tui/context"
 import { RGBA } from "@opentui/core"
 import {
   checkProviderUsage,
@@ -254,7 +254,9 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
     try {
       const listed = await context.client.plugin.list({ location })
       if (disposed || seq !== pluginGateSeq || key !== locationKey()) return
-      const ids = Array.isArray(listed?.data) ? listed.data.map(p => p.id) : []
+      const ids = Array.isArray(listed?.data)
+        ? listed.data.map(p => p.id).filter((id): id is string => typeof id === "string")
+        : []
       setPluginGate(prev => devinGatePlugins(prev, locationKey(), key, seq, ids))
     } catch {
       // Keep the previous list on transient failures.

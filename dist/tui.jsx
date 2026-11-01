@@ -5,7 +5,7 @@ import { memo as _$memo3 } from "@opentui/solid";
 import { createComponent as _$createComponent3 } from "@opentui/solid";
 import { createSignal as createSignal3, createEffect as createEffect3 } from "solid-js";
 
-// node_modules/@opencode-ai/plugin/dist/tui/plugin.js
+// node_modules/@opencode/plugin/dist/tui/plugin.js
 function define(plugin2) {
   return plugin2;
 }
@@ -3451,28 +3451,28 @@ async function checkDroidUsage(query, family, options = {}) {
 import { RGBA } from "@opentui/core";
 function hueLike(theme, hue, reference) {
   try {
-    const step = reference ? theme.source?.(reference)?.step : void 0;
+    const step = reference ? theme.source(reference)?.step : void 0;
     if (step == null) return void 0;
-    return theme.hue?.[hue]?.[step];
+    return theme.hue[hue]?.[step];
   } catch {
     return void 0;
   }
 }
 function resolveThemeColors(theme) {
-  const primary = theme.text?.default ?? RGBA.fromInts(200, 210, 230, 255);
-  const muted = theme.text?.subdued ?? RGBA.fromInts(140, 150, 170, 255);
-  const dim = RGBA.fromInts(100, 108, 122, 255);
-  const success = theme.text?.feedback?.success?.default;
-  const warning = theme.text?.feedback?.warning?.default;
+  const primary = theme.text?.base ?? RGBA.fromInts(200, 210, 230, 255);
+  const muted = theme.text?.muted ?? RGBA.fromInts(140, 150, 170, 255);
+  const dim = theme.text?.faint ?? RGBA.fromInts(100, 108, 122, 255);
+  const success = theme.text?.feedback?.success?.base;
+  const warning = theme.text?.feedback?.warning?.base;
   const green = success ?? RGBA.fromInts(63, 185, 80, 255);
-  const red = theme.text?.feedback?.error?.default ?? RGBA.fromInts(244, 67, 54, 255);
+  const red = theme.text?.feedback?.error?.base ?? RGBA.fromInts(244, 67, 54, 255);
   const amber = warning ?? RGBA.fromInts(255, 193, 7, 255);
   const purple = RGBA.fromInts(180, 120, 255, 255);
   const cyan = RGBA.fromInts(80, 190, 255, 255);
-  const border = theme.border?.default ?? RGBA.fromInts(55, 65, 80, 255);
+  const border = theme.border?.base ?? RGBA.fromInts(55, 65, 80, 255);
   const distCache = green;
-  const distInput = hueLike(theme, "orange", success) ?? warning ?? RGBA.fromInts(255, 152, 0, 255);
-  const distOutput = hueLike(theme, "blue", success) ?? RGBA.fromInts(66, 135, 245, 255);
+  const distInput = hueLike(theme, "accent", success) ?? warning ?? RGBA.fromInts(255, 152, 0, 255);
+  const distOutput = hueLike(theme, "interactive", success) ?? RGBA.fromInts(66, 135, 245, 255);
   return { primary, muted, dim, green, red, amber, purple, cyan, border, distCache, distInput, distOutput };
 }
 
@@ -3916,7 +3916,7 @@ function ProviderUsageBlocks(props) {
         location
       });
       if (disposed || seq !== pluginGateSeq || key !== locationKey()) return;
-      const ids = Array.isArray(listed?.data) ? listed.data.map((p) => p.id) : [];
+      const ids = Array.isArray(listed?.data) ? listed.data.map((p) => p.id).filter((id) => typeof id === "string") : [];
       setPluginGate((prev) => devinGatePlugins(prev, locationKey(), key, seq, ids));
     } catch {
     }

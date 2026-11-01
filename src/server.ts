@@ -1,13 +1,13 @@
 // server.ts - OpenCode V2 plugin server entry.
 //
-// Uses the official V2 API: `import { Plugin } from "@opencode-ai/plugin"` and
-// `Plugin.define({ id, tui: true, setup })`. `tui: true` tells the host that
-// this package also ships a TUI module (./tui). The unified /usage slash is
-// registered only in the TUI keymap layer so it is intercepted locally and
-// never sent to the LLM.
+// Uses the official V2 API: `import { define } from "@opencode/plugin/promise/plugin"`
+// and `define({ id, setup })`. The package also ships a TUI part (./tui) and a
+// GUI part (./gui-experimental); the host discovers them from package exports.
+// The unified /usage slash is registered only in the front-end layers (TUI
+// keymap, GUI command) so it is intercepted locally and never sent to the LLM.
 
-import { define } from "@opencode-ai/plugin/promise/plugin"
-import type { Context, Plugin } from "@opencode-ai/plugin/promise/plugin"
+import { define } from "@opencode/plugin/promise/plugin"
+import type { Context } from "@opencode/plugin/promise/plugin"
 
 export async function setup(_context: Context): Promise<void> {
   // No server-command templates are registered here: the TUI registers the
@@ -17,9 +17,8 @@ export async function setup(_context: Context): Promise<void> {
 
 const plugin = define({
   id: "opencode-usage-stat",
-  tui: true,
   setup,
-} as Plugin & { readonly tui: true }) as Plugin & { readonly tui: true }
+})
 
 export default plugin
 

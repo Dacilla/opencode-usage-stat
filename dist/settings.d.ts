@@ -1,4 +1,4 @@
-import type { Context } from "@opencode-ai/plugin/tui/context";
+import type { Context } from "@opencode/plugin/tui/context";
 export type UsageDisplayMode = "used" | "remaining";
 export type LanguageSetting = "zh" | "en" | "auto";
 export interface UsageStatSettings {

@@ -1,4 +1,4 @@
-import type { OpenCodeClient, SessionMessageInfo } from "@opencode-ai/client";
+import type { OpenCodeClient, SessionMessageInfo } from "@opencode/client";
 import type { AgentBreakdownItem, CacheSavings, DailyBreakdownItem, ErrorStats, HourlyHeatmapItem, MessageRow, ModelBreakdownItem, ModelLatencyItem, OverheadStats, PeriodComparison, PeriodSnapshot, ProjectBreakdownItem, ProviderBreakdownItem, ReportSourceMeta, SessionBreakdownItem, SessionKindSplit, SessionReportInput, SessionTokenData, UsageFilters, UsageReport } from "./formatter.js";
 import type { LoadRange, SessionRow, UsageRow } from "./sqlite-source.js";
 export type { UsageRow, SessionRow } from "./sqlite-source.js";

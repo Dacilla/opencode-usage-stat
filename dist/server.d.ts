@@ -1,7 +1,5 @@
-import type { Context, Plugin } from "@opencode-ai/plugin/promise/plugin";
+import type { Context } from "@opencode/plugin/promise/plugin";
 export declare function setup(_context: Context): Promise<void>;
-declare const plugin: Plugin & {
-    readonly tui: true;
-};
+declare const plugin: import("@opencode/plugin/promise/plugin").Plugin;
 export default plugin;
 export type { Context };

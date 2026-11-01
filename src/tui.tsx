@@ -1,6 +1,6 @@
 import { createSignal, createEffect } from "solid-js"
-import { define } from "@opencode-ai/plugin/tui/plugin"
-import type { Context } from "@opencode-ai/plugin/tui/context"
+import { define } from "@opencode/plugin/tui/plugin"
+import type { Context } from "@opencode/plugin/tui/context"
 import { createPerfTracker } from "./perf-tracker.js"
 import type { PerfTracker } from "./perf-tracker.js"
 import { UsageStatPanel } from "./sidebar.jsx"

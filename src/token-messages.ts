@@ -1,4 +1,4 @@
-import type { OpenCodeClient, SessionMessageInfo } from "@opencode-ai/client"
+import type { OpenCodeClient, SessionMessageInfo } from "@opencode/client"
 
 export interface TokenMessage {
   id: string

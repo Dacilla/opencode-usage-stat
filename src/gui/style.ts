@@ -184,20 +184,22 @@ export const panelCss = `
 }
 .ous-pstrip {
   display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 5px 12px;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 12px;
   border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  overflow: hidden;
 }
 .ous-pstrip-empty { opacity: .5; }
-.ous-pchip {
+.ous-prow { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.ous-pname {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 132px;
+  flex: none;
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -207,24 +209,28 @@ export const panelCss = `
   font: inherit;
   cursor: pointer;
 }
-.ous-pchip:hover .ous-pchip-name { text-decoration: underline; text-underline-offset: 2px; }
-.ous-pchip-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
-.ous-pchip-track {
+.ous-pname:hover .ous-pname-text { text-decoration: underline; text-underline-offset: 2px; }
+.ous-pname-text { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.ous-pstatus { opacity: .6; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ous-pwins { display: flex; flex-wrap: wrap; gap: 4px 18px; min-width: 0; }
+.ous-pwin { display: flex; align-items: center; gap: 6px; }
+.ous-pwin-label { opacity: .55; }
+.ous-pwin-track {
   position: relative;
   display: block;
-  width: 64px;
+  width: 56px;
   height: 4px;
   border-radius: 2px;
   flex: none;
   background: color-mix(in srgb, currentColor 12%, transparent);
 }
-.ous-pchip-fill {
+.ous-pwin-fill {
   display: block;
   height: 100%;
   border-radius: 2px;
   transition: width 260ms ease, background-color 260ms ease;
 }
-.ous-pchip-pace {
+.ous-pwin-pace {
   position: absolute;
   top: -2px;
   bottom: -2px;
@@ -232,5 +238,6 @@ export const panelCss = `
   border-radius: 1px;
   transition: left 260ms ease, background-color 260ms ease;
 }
-.ous-pchip-meta { opacity: .6; white-space: nowrap; }
+.ous-pwin-meta { opacity: .75; white-space: nowrap; }
+.ous-pwin-pace-label { opacity: .5; white-space: nowrap; }
 `

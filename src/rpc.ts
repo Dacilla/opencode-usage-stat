@@ -106,6 +106,9 @@ export const Usage = Rpc.define({
         scope: z.string(),
       }),
     },
+    settingsChanged: {
+      schema: SettingsSchema,
+    },
   },
 })
 

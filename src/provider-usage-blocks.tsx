@@ -165,8 +165,6 @@ interface ProviderState {
 
 export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Element {
   const { context } = props
-  // Manual opt-in only: providers are never auto-detected/enabled.
-  const enabledIds = USAGE_STAT_PROVIDER_IDS.filter(id => resolveProviderUsageConfig(context.options)[id])
   const colors = resolveThemeColors(context.theme)
   const primaryColor = (): RGBA => colors.primary
   const mutedColor = (): RGBA => colors.muted
@@ -193,11 +191,22 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
   const [localCollapse, setLocalCollapse] = createSignal<Record<string, boolean>>({})
 
   // ── Shared settings store: display mode + pace readout toggle ──
-  let settingsStore: { readonly providerUsageDisplay?: UsageDisplayMode; readonly showPace?: boolean } | null = null
+  let settingsStore: {
+    readonly providerUsageDisplay?: UsageDisplayMode
+    readonly showPace?: boolean
+    readonly providerUsage?: Record<string, boolean>
+  } | null = null
   try {
     const [store] = getSettingsStore(context)
     settingsStore = store
   } catch { /* fall back to defaults */ }
+  // Manual opt-in only. Stored overrides (set in the desktop settings page)
+  // win over the plugin's providerUsage options, so both front-ends agree.
+  const enabledIds = (): ProviderId[] => USAGE_STAT_PROVIDER_IDS.filter(id => {
+    const override = settingsStore?.providerUsage?.[id]
+    return override ?? resolveProviderUsageConfig(context.options)[id] === true
+  })
+
   const displayMode = (): UsageDisplayMode => {
     const stored = settingsStore?.providerUsageDisplay
     if (stored === "remaining" || stored === "used") return stored
@@ -227,8 +236,8 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
 
   // ── Plugin gate (Devin + Droid): plugin list + enabled model, scoped to
   // the live location. Both providers share one plugin.list poll.
-  const devinEnabled = enabledIds.includes("devin")
-  const droidEnabled = enabledIds.includes("droid")
+  const devinEnabled = enabledIds().includes("devin")
+  const droidEnabled = enabledIds().includes("droid")
   const gateEnabled = devinEnabled || droidEnabled
   let disposed = false
   let pluginGateSeq = 0
@@ -295,7 +304,7 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
   }))
 
   const [states, setStates] = createSignal<ProviderState[]>(
-    enabledIds.map(id => ({ id, loading: false, result: null })),
+    enabledIds().map(id => ({ id, loading: false, result: null })),
   )
 
   const [nowMs, setNowMs] = createSignal(Date.now())
@@ -402,12 +411,13 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
     if (devinEnabled && devinEligible()) void refreshOne("devin")
   })
 
-  if (enabledIds.length > 0) {
-    for (const id of enabledIds) {
+  const ids = enabledIds()
+    if (ids.length > 0) {
+    for (const id of ids) {
       void refreshOne(id)
     }
     const timers: ReturnType<typeof setInterval>[] = []
-    for (const id of enabledIds) {
+    for (const id of ids) {
       timers.push(setInterval(() => { void refreshOne(id) }, REFRESH_MS))
     }
     timers.push(setInterval(() => { setNowMs(Date.now()) }, TICK_MS))

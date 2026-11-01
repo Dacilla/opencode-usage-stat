@@ -4,7 +4,7 @@
 // panel is the one the TUI sees. Plugin options seed the first read; stored
 // values win afterwards.
 import type { Context } from "@opencode/plugin/promise/plugin"
-import { DEFAULT_SETTINGS, optionsToSettings } from "../settings.js"
+import { DEFAULT_SETTINGS, optionsToSettings } from "../settings-core.js"
 import type { Settings, SettingsPatch } from "../rpc.js"
 
 const SETTINGS_KEY = "settings"

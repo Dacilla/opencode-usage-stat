@@ -18,13 +18,23 @@ import { createUsageClient } from "./server/usage-client.js"
 export async function setup(context: Context): Promise<() => Promise<void>> {
   setV2Client(createUsageClient(context))
 
+  // Declared before the handlers so a settings write can announce itself once
+  // registration has completed. Handlers never run before `register` resolves.
+  let announce: ((settings: import("./rpc.js").Settings) => Promise<void>) | undefined
+
   const registration = await context.rpc.register(Usage, {
     settingsGet: async () => readSettings(context),
-    settingsSet: async ({ patch }) => writeSettings(context, patch),
+    settingsSet: async ({ patch }) => {
+      const next = await writeSettings(context, patch)
+      await announce?.(next)
+      return next
+    },
     providerConfig: async () => providerCatalog(context.options, await readSettings(context)),
     providers: async ({ ids, force }) => providerSnapshots(ids, force === true),
     report: async ({ scope, format, sessionID }) => generateReport(scope, format, sessionID),
   })
+
+  announce = settings => registration.events.emit("settingsChanged", settings)
 
   return async () => {
     await registration.dispose()

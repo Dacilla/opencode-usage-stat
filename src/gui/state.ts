@@ -44,6 +44,7 @@ export function createUsageState(ctx: SetupContext<typeof definition>): UsageSta
 
   let disposed = false
   let inFlight: Promise<void> | undefined
+  let subscribed: unknown
 
   async function load(force: boolean): Promise<void> {
     if (disposed) return
@@ -51,6 +52,12 @@ export function createUsageState(ctx: SetupContext<typeof definition>): UsageSta
     try {
       // Read the client here: it changes when the server restarts.
       const rpc = ctx.client.rpc(Usage)
+      if (subscribed !== rpc) {
+        rpc.events.on("settingsChanged", (event) => {
+          if (!disposed) setSettings(event.data)
+        })
+        subscribed = rpc
+      }
       const [nextSettings, nextCatalog] = await Promise.all([rpc.settingsGet({}), rpc.providerConfig({})])
       if (disposed) return
       setSettings(nextSettings)

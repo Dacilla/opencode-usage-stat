@@ -239,6 +239,24 @@ export declare const Usage: {
                 scope: z.ZodString;
             }, z.core.$strip>;
         };
+        settingsChanged: {
+            schema: z.ZodObject<{
+                showPerformance: z.ZodBoolean;
+                showPricing: z.ZodBoolean;
+                showTrend: z.ZodBoolean;
+                showPace: z.ZodBoolean;
+                providerUsageDisplay: z.ZodEnum<{
+                    remaining: "remaining";
+                    used: "used";
+                }>;
+                language: z.ZodEnum<{
+                    auto: "auto";
+                    en: "en";
+                    zh: "zh";
+                }>;
+                providerUsage: z.ZodRecord<z.ZodString, z.ZodBoolean>;
+            }, z.core.$strip>;
+        };
     };
 };
 export type Settings = z.infer<typeof SettingsSchema>;

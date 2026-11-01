@@ -1,102 +1,122 @@
-// settings.ts - Unified persisted settings for the Usage Stat panel.
+// settings.ts - Shared settings for the TUI, backed by the server store.
 //
-// One storage key ("usage-stat-settings") holds every user preference:
-// sidebar toggles, provider usage display mode and language. The panel,
-// provider blocks and the /usage dialogs all share the same reactive store
-// (V2 storage.store coalesces same-key stores), so toggles take effect
-// immediately and survive TUI restarts. Plugin `options` seed the initial
-// values only; after that the stored settings win.
+// The server part owns the values; this module keeps a reactive Solid mirror so
+// the existing synchronous reads in the sidebar and dialogs keep working. A
+// change made in the desktop app arrives over the `settingsChanged` RPC event,
+// and a change made here is written through the same RPC.
 //
-// Legacy note: versions <=2.1.2 wrote "usage-stat-config" with two clashing
-// shapes ({showPerformance...} and {language}); migrateLegacySettings copies
-// whatever is still there into the new key exactly once.
-
+// The first hydrate also performs the one-shot legacy migration: values still in
+// the old "usage-stat-config" TUI storage key seed the server store when the
+// server is still at its defaults.
 import type { Context } from "@opencode/plugin/tui/context"
+import { createStore, type SetStoreFunction } from "solid-js/store"
+import { Usage } from "./rpc.js"
+import type { SettingsPatch } from "./rpc.js"
+import { DEFAULT_SETTINGS, LEGACY_KEY, legacyPatch, optionsToSettings, SETTING_KEYS, type UsageStatSettings } from "./settings-core.js"
 
-export type UsageDisplayMode = "used" | "remaining"
-export type LanguageSetting = "zh" | "en" | "auto"
+export {
+  DEFAULT_SETTINGS,
+  SETTING_KEYS,
+  LEGACY_KEY,
+  SETTINGS_KEY,
+  optionsToSettings,
+  type LanguageSetting,
+  type UsageDisplayMode,
+  type UsageStatSettings,
+} from "./settings-core.js"
 
-export interface UsageStatSettings {
-  showPerformance: boolean
-  showPricing: boolean
-  showTrend: boolean
-  /** Whether provider usage rows show the pace-marker percentage (`│43%`). */
-  showPace: boolean
-  /** Whether provider usage percentages show used or remaining quota. */
-  providerUsageDisplay: UsageDisplayMode
-  language: LanguageSetting
-}
+type SettingsMutation = (mutation: (draft: UsageStatSettings) => void) => Promise<void>
+/** `[reactive values, write-through mutation, first-hydrate promise]`. */
+export type SettingsMirror = readonly [UsageStatSettings, SettingsMutation, Promise<void>]
+type SettingsStore = SettingsMirror
 
-export const SETTINGS_KEY = "usage-stat-settings"
-const LEGACY_KEY = "usage-stat-config"
-
-export const DEFAULT_SETTINGS: UsageStatSettings = {
-  showPerformance: true,
-  showPricing: true,
-  showTrend: true,
-  // Off by default: at ~31 usable row cells an inline readout makes the reset
-  // wrap at a different point per row (Monthly's label is longest), which
-  // renders ragged. The pace % is on hover instead; enable in /usage to try it.
-  showPace: false,
-  providerUsageDisplay: "used",
-  language: "auto",
-}
-
-/** Seed values from plugin options (`sidebar.*`, `showPace`, `language`, `providerUsageDisplay`). */
-export function optionsToSettings(options: unknown): Partial<UsageStatSettings> {
-  const out: Partial<UsageStatSettings> = {}
+function readLegacy(context: Context): Partial<UsageStatSettings> {
   try {
-    const cfg = options && typeof options === "object" ? options as Record<string, any> : {}
-    if (cfg?.sidebar && typeof cfg.sidebar === "object") {
-      if (typeof cfg.sidebar.showPerformance === "boolean") out.showPerformance = cfg.sidebar.showPerformance
-      if (typeof cfg.sidebar.showPricing === "boolean") out.showPricing = cfg.sidebar.showPricing
-      if (typeof cfg.sidebar.showTrend === "boolean") out.showTrend = cfg.sidebar.showTrend
-    }
-    if (typeof cfg?.showPace === "boolean") out.showPace = cfg.showPace
-    if (cfg?.language === "zh" || cfg?.language === "en" || cfg?.language === "auto") out.language = cfg.language
-    if (cfg?.providerUsageDisplay === "used" || cfg?.providerUsageDisplay === "remaining") {
-      out.providerUsageDisplay = cfg.providerUsageDisplay
-    }
-  } catch { /* defaults */ }
-  return out
+    const [legacy] = context.storage.store<Partial<UsageStatSettings>>(LEGACY_KEY, { initial: {} })
+    return { ...legacy }
+  } catch {
+    return {}
+  }
 }
-
-type SettingsStore = readonly [UsageStatSettings, (mutation: (draft: UsageStatSettings) => void) => Promise<void>]
 
 /**
- * Get (or create) the shared reactive settings store. Throws when the host has
- * no storage — callers must fall back to defaults/options.
+ * Build a mirror over the server store.
+ *
+ * Reads are synchronous and reactive; writes go over RPC and reconcile with the
+ * server's response. `ready` settles after the first hydrate, including the
+ * legacy migration, and never rejects.
+ */
+export function createSettingsMirror(context: Context): SettingsMirror {
+  const [store, setStore] = createStore<UsageStatSettings>({
+    ...DEFAULT_SETTINGS,
+    providerUsage: {},
+    ...optionsToSettings(context.options),
+  })
+
+  const apply = (next: UsageStatSettings): void => {
+    setStore({
+      showPerformance: next.showPerformance,
+      showPricing: next.showPricing,
+      showTrend: next.showTrend,
+      showPace: next.showPace,
+      providerUsageDisplay: next.providerUsageDisplay,
+      language: next.language,
+      providerUsage: { ...next.providerUsage },
+    })
+  }
+
+  const ready = (async () => {
+    try {
+      const rpc = context.client.rpc(Usage)
+      const remote = await rpc.settingsGet({})
+      const patch = legacyPatch(remote, readLegacy(context))
+      const next = Object.keys(patch).length > 0 ? await rpc.settingsSet({ patch }) : remote
+      apply(next)
+      rpc.events.on("settingsChanged", event => apply(event.data))
+    } catch (error) {
+      // Keep the option-seeded defaults; the next mutation retries the write.
+      console.warn("[opencode-usage-stat] settings sync unavailable:", error)
+    }
+  })()
+
+  const mutate: SettingsMutation = async (mutation) => {
+    const draft: UsageStatSettings = { ...store }
+    mutation(draft)
+
+    const patch: SettingsPatch = {}
+    for (const key of SETTING_KEYS) {
+      if (draft[key] !== store[key]) (patch as Record<string, unknown>)[key] = draft[key]
+    }
+    if (JSON.stringify(draft.providerUsage) !== JSON.stringify(store.providerUsage)) {
+      patch.providerUsage = { ...draft.providerUsage }
+    }
+    if (Object.keys(patch).length === 0) return
+
+    apply(draft)
+    try {
+      const next = await context.client.rpc(Usage).settingsSet({ patch })
+      apply(next)
+    } catch (error) {
+      console.warn("[opencode-usage-stat] settings write failed:", error)
+    }
+  }
+
+  return [store, mutate, ready] as const
+}
+
+let shared: SettingsMirror | null = null
+
+/**
+ * The TUI's single settings mirror. Reads stay synchronous and reactive; writes
+ * go to the server and reconcile with its response.
  */
 export function getSettingsStore(context: Context): SettingsStore {
-  return context.storage.store<UsageStatSettings>(SETTINGS_KEY, {
-    initial: { ...DEFAULT_SETTINGS, ...optionsToSettings(context.options) },
-  }) as SettingsStore
+  shared ??= createSettingsMirror(context)
+  return shared
 }
 
-let migrationDone = false
-
-/**
- * One-shot migration from the legacy "usage-stat-config" key. Non-destructive:
- * legacy values are copied into the new store only when they differ from what
- * is already stored and still at defaults. Awaited by the settings dialog so
- * the first read sees migrated values; retried if storage was unavailable.
- */
+/** Kept for callers that used the old migration hook; hydration does it once. */
 export async function migrateLegacySettings(context: Context): Promise<void> {
-  if (migrationDone) return
-  try {
-    const [settings, mutate] = getSettingsStore(context)
-    const [legacy] = context.storage.store<Partial<UsageStatSettings>>(LEGACY_KEY, { initial: {} })
-    const patch: Partial<UsageStatSettings> = {}
-    for (const key of ["showPerformance", "showPricing", "showTrend", "showPace", "providerUsageDisplay", "language"] as const) {
-      const value = legacy?.[key]
-      if (value !== undefined && value !== null && settings[key] !== value &&
-        settings[key] === DEFAULT_SETTINGS[key]) {
-        (patch as Record<string, unknown>)[key] = value
-      }
-    }
-    if (Object.keys(patch).length > 0) {
-      await mutate(draft => Object.assign(draft, patch))
-    }
-    migrationDone = true
-  } catch { /* storage unavailable: allow a retry on the next call */ }
+  const [, , ready] = getSettingsStore(context)
+  await ready
 }

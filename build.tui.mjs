@@ -29,6 +29,7 @@ const external = [
   "@opentui/keymap/*",
   "@opencode/client",
   "@opencode/client/*",
+  "@opencode/plugin/rpc",
   "@opencode/theme",
   "@opencode/theme/*",
 ]

@@ -1,31 +1,22 @@
 import type { Context } from "@opencode/plugin/tui/context";
-export type UsageDisplayMode = "used" | "remaining";
-export type LanguageSetting = "zh" | "en" | "auto";
-export interface UsageStatSettings {
-    showPerformance: boolean;
-    showPricing: boolean;
-    showTrend: boolean;
-    /** Whether provider usage rows show the pace-marker percentage (`│43%`). */
-    showPace: boolean;
-    /** Whether provider usage percentages show used or remaining quota. */
-    providerUsageDisplay: UsageDisplayMode;
-    language: LanguageSetting;
-}
-export declare const SETTINGS_KEY = "usage-stat-settings";
-export declare const DEFAULT_SETTINGS: UsageStatSettings;
-/** Seed values from plugin options (`sidebar.*`, `showPace`, `language`, `providerUsageDisplay`). */
-export declare function optionsToSettings(options: unknown): Partial<UsageStatSettings>;
-type SettingsStore = readonly [UsageStatSettings, (mutation: (draft: UsageStatSettings) => void) => Promise<void>];
+import { type UsageStatSettings } from "./settings-core.js";
+export { DEFAULT_SETTINGS, SETTING_KEYS, LEGACY_KEY, SETTINGS_KEY, optionsToSettings, type LanguageSetting, type UsageDisplayMode, type UsageStatSettings, } from "./settings-core.js";
+type SettingsMutation = (mutation: (draft: UsageStatSettings) => void) => Promise<void>;
+/** `[reactive values, write-through mutation, first-hydrate promise]`. */
+export type SettingsMirror = readonly [UsageStatSettings, SettingsMutation, Promise<void>];
+type SettingsStore = SettingsMirror;
 /**
- * Get (or create) the shared reactive settings store. Throws when the host has
- * no storage — callers must fall back to defaults/options.
+ * Build a mirror over the server store.
+ *
+ * Reads are synchronous and reactive; writes go over RPC and reconcile with the
+ * server's response. `ready` settles after the first hydrate, including the
+ * legacy migration, and never rejects.
+ */
+export declare function createSettingsMirror(context: Context): SettingsMirror;
+/**
+ * The TUI's single settings mirror. Reads stay synchronous and reactive; writes
+ * go to the server and reconcile with its response.
  */
 export declare function getSettingsStore(context: Context): SettingsStore;
-/**
- * One-shot migration from the legacy "usage-stat-config" key. Non-destructive:
- * legacy values are copied into the new store only when they differ from what
- * is already stored and still at defaults. Awaited by the settings dialog so
- * the first read sees migrated values; retried if storage was unavailable.
- */
+/** Kept for callers that used the old migration hook; hydration does it once. */
 export declare function migrateLegacySettings(context: Context): Promise<void>;
-export {};

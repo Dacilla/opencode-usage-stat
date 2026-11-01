@@ -1599,18 +1599,8 @@ async function getSessionTitle(sessionId) {
   }
 }
 
-// node_modules/@opencode/schema/dist/rpc.js
-var rpc_exports = {};
-__export(rpc_exports, {
-  Rpc: () => rpc_exports,
-  define: () => define2
-});
-function define2(definition) {
-  const reserved = Object.values(definition.methods).flatMap((method) => Object.keys(method.errors ?? {})).find((name) => name.startsWith("rpc."));
-  if (reserved)
-    throw new Error(`RPC error names starting with "rpc." are reserved: ${reserved}`);
-  return definition;
-}
+// src/rpc.ts
+import { Rpc } from "@opencode/plugin/rpc";
 
 // node_modules/zod/v4/classic/external.js
 var external_exports = {};
@@ -21376,7 +21366,7 @@ var ReportResultSchema = external_exports.object({
   bytes: external_exports.number(),
   scope: ReportScopeSchema
 });
-var Usage = rpc_exports.define({
+var Usage = Rpc.define({
   id: "opencode-usage-stat",
   methods: {
     /** Current durable settings, seeded from plugin options on first read. */
@@ -21418,6 +21408,9 @@ var Usage = rpc_exports.define({
         format: external_exports.string(),
         scope: external_exports.string()
       })
+    },
+    settingsChanged: {
+      schema: SettingsSchema
     }
   }
 });
@@ -26776,7 +26769,7 @@ function requireSession(sessionID) {
   return sessionID;
 }
 
-// src/settings.ts
+// src/settings-core.ts
 var DEFAULT_SETTINGS = {
   showPerformance: true,
   showPricing: true,
@@ -26786,7 +26779,8 @@ var DEFAULT_SETTINGS = {
   // renders ragged. The pace % is on hover instead; enable in /usage to try it.
   showPace: false,
   providerUsageDisplay: "used",
-  language: "auto"
+  language: "auto",
+  providerUsage: {}
 };
 function optionsToSettings(options) {
   const out = {};
@@ -26865,13 +26859,19 @@ function createUsageClient(context) {
 // src/server.ts
 async function setup(context) {
   setV2Client(createUsageClient(context));
+  let announce;
   const registration = await context.rpc.register(Usage, {
     settingsGet: async () => readSettings(context),
-    settingsSet: async ({ patch }) => writeSettings(context, patch),
+    settingsSet: async ({ patch }) => {
+      const next = await writeSettings(context, patch);
+      await announce?.(next);
+      return next;
+    },
     providerConfig: async () => providerCatalog(context.options, await readSettings(context)),
     providers: async ({ ids, force }) => providerSnapshots(ids, force === true),
     report: async ({ scope, format, sessionID }) => generateReport(scope, format, sessionID)
   });
+  announce = (settings) => registration.events.emit("settingsChanged", settings);
   return async () => {
     await registration.dispose();
   };

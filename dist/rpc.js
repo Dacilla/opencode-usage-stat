@@ -89,6 +89,9 @@ var Usage = Rpc.define({
         format: z.string(),
         scope: z.string()
       })
+    },
+    settingsChanged: {
+      schema: SettingsSchema
     }
   }
 });

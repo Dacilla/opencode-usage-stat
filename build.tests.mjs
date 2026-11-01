@@ -1,39 +1,33 @@
 import { build } from "esbuild"
+import { readdir } from "node:fs/promises"
 
 /**
  * Bundle each test/*.test.ts -> dist-test/*.test.mjs with esbuild so we can run
  * `node --test dist-test` (TS sources are bundled; node builtins stay external).
+ *
+ * Every *.test.ts in test/ is picked up, so a new test file cannot be silently
+ * skipped.
  */
 
 const external = [
-  "@opencode-ai/plugin",
-  "@opencode-ai/plugin/*",
-  "@opencode-ai/client",
-  "@opencode-ai/client/*",
-  "@opencode-ai/theme",
-  "@opencode-ai/theme/*",
+  "@opencode/plugin",
+  "@opencode/plugin/*",
+  "@opencode/client",
+  "@opencode/client/*",
+  "@opencode/theme",
+  "@opencode/theme/*",
   "@opentui/core",
   "@opentui/core/*",
   "@opentui/solid",
   "@opentui/solid/*",
   "solid-js",
   "solid-js/*",
+  "zod",
 ]
 
-const files = [
-  "test/provider-usage.test.ts",
-    "test/provider-display.test.ts",
-  "test/dist-bar.test.ts",
-   "test/droid-usage.test.ts",
-   "test/factory-keyring.test.ts",
-  "test/formatter.test.ts",
-  "test/queries.test.ts",
-  "test/sqlite-source.test.ts",
-  "test/credentials.test.ts",
-  "test/perf-tracker.test.ts",
-  "test/stats-store.test.ts",
-  "test/token-messages.test.ts",
-]
+const files = (await readdir("test"))
+  .filter(file => file.endsWith(".test.ts"))
+  .map(file => `test/${file}`)
 
 await Promise.all(
   files.map(file => {
@@ -51,4 +45,4 @@ await Promise.all(
   }),
 )
 
-console.log("✓ esbuild: tests -> dist-test/*.test.mjs")
+console.log(`✓ esbuild: ${files.length} test files -> dist-test/*.test.mjs`)

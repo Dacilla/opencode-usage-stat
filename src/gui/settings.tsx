@@ -88,6 +88,12 @@ export function UsageSettings() {
                 checked={value().showPerformance}
                 onChange={showPerformance => void patch({ showPerformance })}
               />
+              <ui.Switch
+                label={ctx.t("settings.showPace")}
+                description={ctx.t("settings.showPaceHint")}
+                checked={value().showPace}
+                onChange={showPace => void patch({ showPace })}
+              />
             </section>
 
             <section class="ous-section-block">

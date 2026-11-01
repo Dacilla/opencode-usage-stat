@@ -1,7 +1,8 @@
-import { For, Show, createMemo } from "solid-js"
+import { For, Show, createMemo, createSignal, onCleanup } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
 import type { ProviderResult, UsageWindow } from "../rpc"
 import { isOverPace, windowPacePercent } from "../pace"
+import { collapsedSummary } from "../provider-summary"
 import { usageLevel } from "../tui-layout"
 import type { definition } from "./definition"
 import { usageState } from "./state"
@@ -35,32 +36,21 @@ function shown(percent: number, mode: "used" | "remaining"): number {
 }
 
 /** Pace position on the displayed axis, or null when the window has no bounds. */
-function paceShown(window: UsageWindow, mode: "used" | "remaining"): number | null {
-  const pace = windowPacePercent(window)
+function paceShown(window: UsageWindow, mode: "used" | "remaining", nowMs: number): number | null {
+  const pace = windowPacePercent(window, nowMs)
   if (pace == null) return null
   return mode === "remaining" ? 100 - pace : pace
 }
 
-function resetLabel(window: UsageWindow): string | undefined {
+function resetLabel(window: UsageWindow, nowMs: number): string | undefined {
   if (!window.resetsAt) return undefined
   const at = Date.parse(window.resetsAt)
   if (!Number.isFinite(at)) return undefined
-  const minutes = Math.max(0, Math.round((at - Date.now()) / 60_000))
+  const minutes = Math.max(0, Math.round((at - nowMs) / 60_000))
   if (minutes < 60) return `${minutes}m`
   const hours = Math.round(minutes / 60)
   if (hours < 48) return `${hours}h`
   return `${Math.round(hours / 24)}d`
-}
-
-function shortform(provider: ProviderResult, mode: "used" | "remaining"): string {
-  const windows = (provider.windows ?? []).filter(window => window.percent != null).slice(0, 2)
-  if (windows.length === 0) return provider.status
-  return windows
-    .map(window => {
-      const value = shown(window.percent ?? 0, mode)
-      return `${window.label} ${Math.round(value)}%`
-    })
-    .join(" · ")
 }
 
 /**
@@ -74,6 +64,13 @@ export function ProviderUsage() {
   const state = usageState(ctx)
 
   const mode = createMemo(() => state.settings()?.providerUsageDisplay ?? "used")
+
+  // Reset countdowns and the pace marker move every second, like the TUI.
+  // This never polls a provider: the data refreshes on its own 2-minute cycle.
+  const [nowMs, setNowMs] = createSignal(Date.now())
+  const ticker = setInterval(() => setNowMs(Date.now()), 1000)
+  onCleanup(() => clearInterval(ticker))
+
   const collapsed = (key: string) => ctx.stores.view.value.collapsed.includes(`provider:${key}`)
 
   function toggle(key: string) {
@@ -116,9 +113,14 @@ export function ProviderUsage() {
               <div class="ous-provider">
                 <button class="ous-model-head" type="button" onClick={() => toggle(provider.providerId)}>
                   <span class={tone(worst)} />
-                  <span class="ous-model-name">{provider.providerName}</span>
+                  <span class="ous-model-name">
+                    {provider.providerName}
+                    <Show when={provider.planLabel}>
+                      <span class="ous-plan">{provider.planLabel}</span>
+                    </Show>
+                  </span>
                   <span class="ous-model-meta">
-                    {shortform(provider, mode())} {open() ? "▾" : "▸"}
+                    {collapsedSummary(provider.windows, mode()) ?? provider.status} {open() ? "▾" : "▸"}
                   </span>
                 </button>
 
@@ -130,25 +132,36 @@ export function ProviderUsage() {
                     <For each={provider.windows ?? []}>
                       {(window) => {
                         const position = () => shown(window.percent ?? 0, mode())
-                        const pace = () => paceShown(window, mode())
+                        const pace = () => paceShown(window, mode(), nowMs())
                         const over = () =>
                           isOverPace({
                             percent: window.percent,
                             startsAt: window.startsAt,
                             resetsAt: window.resetsAt,
-                          })
+                          }, nowMs())
+                        // Hover swaps the reset suffix for the pace readout,
+                        // like the TUI's hover line.
+                        const [hover, setHover] = createSignal(false)
+                        const paceText = () => (pace() == null ? "" : `│${Math.round(pace() ?? 0)}%`)
                         return (
-                          <div class="ous-window">
+                          <div
+                            class="ous-window"
+                            onPointerEnter={() => setHover(true)}
+                            onPointerLeave={() => setHover(false)}
+                          >
                             <div class="ous-line">
                               <span class="ous-muted">{window.label}</span>
                               <span class="ous-muted">
                                 {window.valueLabel ??
                                   (window.percent == null ? "—" : `${Math.round(position())}%`)}
                                 <Show when={state.settings()?.showPace && pace() != null}>
-                                  {` │${Math.round(pace() ?? 0)}%`}
+                                  {` ${paceText()}`}
                                 </Show>
-                                <Show when={resetLabel(window)}>
-                                  {` · ${ctx.t("providers.resets")} ${resetLabel(window)}`}
+                                <Show when={hover() && pace() != null}>
+                                  {` ${paceText()}`}
+                                </Show>
+                                <Show when={resetLabel(window, nowMs()) && !(hover() && pace() != null)}>
+                                  {` · ${ctx.t("providers.resets")} ${resetLabel(window, nowMs())}`}
                                 </Show>
                               </span>
                             </div>
@@ -164,7 +177,7 @@ export function ProviderUsage() {
                               <Show when={pace() != null}>
                                 <span
                                   class="ous-pace"
-                                  title={ctx.t("providers.pace")}
+                                  title={`${ctx.t("providers.pace")}: ${Math.round(pace() ?? 0)}%`}
                                   style={{
                                     left: `${pace()}%`,
                                     "background-color": over() ? "#f85149" : "#3fb950",

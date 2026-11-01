@@ -1236,6 +1236,50 @@ function isOverPace(win, nowMs = Date.now()) {
   return win.percent != null && pace != null && win.percent > pace;
 }
 
+// src/provider-summary.ts
+var DOLLAR_POOL_LABEL = /^\s*\$[\d,.]+\s*\/\s*\$[\d,.]+\s*left\s*$/;
+function toNumber(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) return Number(value);
+  return null;
+}
+function dollarPoolRemaining(valueLabel) {
+  if (!valueLabel || !DOLLAR_POOL_LABEL.test(valueLabel)) return null;
+  return toNumber(valueLabel.match(/\$([\d,.]+)/)?.[1]?.replace(/,/g, ""));
+}
+function shortDollars(value) {
+  return value.toFixed(2).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+function collapsedSummary(windows, mode) {
+  if (!windows || windows.length === 0) return null;
+  const shown = (win) => {
+    if (win.percent == null) return null;
+    return (mode === "remaining" ? 100 - win.percent : win.percent).toFixed(1);
+  };
+  const isSessionWin = (label) => /(^|\b)(5h|session|rolling)\b/i.test(label);
+  const isWeeklyWin = (label) => /(^|\b)(weekly|7d)\b/i.test(label);
+  const session = windows.find((w) => isSessionWin(w.label));
+  const weekly = windows.find((w) => isWeeklyWin(w.label));
+  const n = session ? shown(session) : null;
+  const m = weekly ? shown(weekly) : null;
+  if (n != null && m != null) return `${n}%/5h ${m}%/7d`;
+  if (n != null) return `${n}%/5h`;
+  if (m != null) return `${m}%/7d`;
+  const pool = windows.find((w) => DOLLAR_POOL_LABEL.test(w.valueLabel ?? ""));
+  if (pool) {
+    const remaining = dollarPoolRemaining(pool.valueLabel);
+    const total = toNumber((pool.valueLabel ?? "").match(/\/\s*\$([\d,.]+)/)?.[1]?.replace(/,/g, ""));
+    const p = shown(pool);
+    if (p != null && remaining != null && total != null) {
+      const dollars = mode === "remaining" ? remaining : Math.max(0, total - remaining);
+      return `${p}%/${shortDollars(dollars)}$`;
+    }
+  }
+  const firstPercent = windows.map(shown).find((v) => v != null);
+  if (firstPercent != null) return `${firstPercent}%`;
+  return windows.find((w) => w.valueLabel)?.valueLabel ?? null;
+}
+
 // src/provider-usage.ts
 var PROVIDER_TIMEOUT_MS = 15e3;
 function fetchWithTimeout(url2, init, fetchImpl, timeoutMs = PROVIDER_TIMEOUT_MS) {
@@ -1267,8 +1311,8 @@ function clampPct(n) {
   return Math.min(100, Math.max(0, n));
 }
 function pct(used, total) {
-  const u = toNumber(used);
-  const t2 = toNumber(total);
+  const u = toNumber2(used);
+  const t2 = toNumber2(total);
   if (u == null || t2 == null || t2 <= 0) return null;
   return clampPct(u / t2 * 100);
 }
@@ -1276,7 +1320,7 @@ function fmtMoney(value) {
   if (value === null || !Number.isFinite(value)) return null;
   return value.toFixed(2);
 }
-function toNumber(value) {
+function toNumber2(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) return Number(value);
   return null;
@@ -1312,7 +1356,7 @@ function windowLabelFromSeconds(seconds) {
   return `${seconds}s`;
 }
 function windowLabel(duration3, unit) {
-  const d = toNumber(duration3);
+  const d = toNumber2(duration3);
   if (d == null) return "limit";
   if (unit === "TIME_UNIT_MINUTE") return `${d}m`;
   if (unit === "TIME_UNIT_HOUR") return `${d}h`;
@@ -1320,7 +1364,7 @@ function windowLabel(duration3, unit) {
   return "limit";
 }
 function windowSeconds(duration3, unit) {
-  const d = toNumber(duration3);
+  const d = toNumber2(duration3);
   if (d == null) return null;
   if (unit === "TIME_UNIT_MINUTE") return d * 60;
   if (unit === "TIME_UNIT_HOUR") return d * 3600;
@@ -1328,7 +1372,7 @@ function windowSeconds(duration3, unit) {
   return null;
 }
 function percentWindow(label, percent, resetMs, valueLabel = null, startOffsetSeconds = null) {
-  const pctValue = toNumber(percent);
+  const pctValue = toNumber2(percent);
   const resetsAt = toResetTimestamp(resetMs);
   const window = { label, percent: pctValue != null ? clampPct(pctValue) : null, resetsAt, valueLabel };
   if (resetsAt && startOffsetSeconds != null) window.startsAt = shiftIsoTimestamp(resetsAt, -startOffsetSeconds);
@@ -1451,8 +1495,8 @@ function parseCodexUsage(payload) {
   const out = [];
   const primary = data.rate_limit?.primary_window;
   if (primary) {
-    const percent = toNumber(primary.used_percent);
-    const seconds = toNumber(primary.limit_window_seconds);
+    const percent = toNumber2(primary.used_percent);
+    const seconds = toNumber2(primary.limit_window_seconds);
     out.push(percentWindow(
       windowLabelFromSeconds(seconds),
       percent,
@@ -1463,8 +1507,8 @@ function parseCodexUsage(payload) {
   }
   const secondary = data.rate_limit?.secondary_window;
   if (secondary) {
-    const percent = toNumber(secondary.used_percent);
-    const seconds = toNumber(secondary.limit_window_seconds);
+    const percent = toNumber2(secondary.used_percent);
+    const seconds = toNumber2(secondary.limit_window_seconds);
     out.push(percentWindow(
       windowLabelFromSeconds(seconds),
       percent,
@@ -1474,7 +1518,7 @@ function parseCodexUsage(payload) {
     ));
   }
   if (data.credits) {
-    const balance = toNumber(data.credits.balance);
+    const balance = toNumber2(data.credits.balance);
     const unlimited = Boolean(data.credits.unlimited);
     out.push({
       label: "Credits",
@@ -1485,8 +1529,8 @@ function parseCodexUsage(payload) {
   }
   if (data.spend_control?.individual_limit) {
     const sl = data.spend_control.individual_limit;
-    const used = toNumber(sl.used);
-    const limit = toNumber(sl.limit);
+    const used = toNumber2(sl.used);
+    const limit = toNumber2(sl.limit);
     out.push(percentWindow(
       "Spend Limit",
       sl.used_percent,
@@ -1561,7 +1605,7 @@ function resolveClaudeCliCredential(path = claudeCliCredentialPath()) {
       oauth?.accessToken ?? oauth?.access_token ?? root.accessToken ?? root.access_token
     );
     if (!token) return null;
-    const expiry = toNumber(oauth?.expiresAt ?? root.expiresAt);
+    const expiry = toNumber2(oauth?.expiresAt ?? root.expiresAt);
     return { token, expires: expiry };
   } catch {
     return null;
@@ -1579,7 +1623,7 @@ function parseClaudeUsage(payload) {
   for (const limit of limits) {
     const item = asObject(limit);
     if (!item) continue;
-    const percent = toNumber(item.percent);
+    const percent = toNumber2(item.percent);
     const resetAt = item.resets_at;
     if (item.kind === "session") {
       out.push(percentWindow("5h", percent, resetAt, null, 5 * 3600));
@@ -1601,13 +1645,13 @@ function parseClaudeUsage(payload) {
   if (spend?.enabled === true) {
     const usedMoney = asObject(spend.used);
     const limitMoney = asObject(spend.limit);
-    const usedMinor = toNumber(usedMoney?.amount_minor);
-    const limitMinor = toNumber(limitMoney?.amount_minor);
-    const exponent = toNumber(usedMoney?.exponent) ?? 2;
+    const usedMinor = toNumber2(usedMoney?.amount_minor);
+    const limitMinor = toNumber2(limitMoney?.amount_minor);
+    const exponent = toNumber2(usedMoney?.exponent) ?? 2;
     const currency = nonEmptyString(usedMoney?.currency);
     const prefix = currency === "USD" || !currency ? "$" : `${currency} `;
     const used = usedMinor === null ? null : usedMinor / 10 ** exponent;
-    const limit = limitMinor === null ? null : limitMinor / 10 ** (toNumber(limitMoney?.exponent) ?? 2);
+    const limit = limitMinor === null ? null : limitMinor / 10 ** (toNumber2(limitMoney?.exponent) ?? 2);
     out.push(percentWindow(
       "Extra Usage",
       spend.percent,
@@ -1638,11 +1682,11 @@ var KIMI_ALIASES = ["kimi-for-coding", "kimi"];
 var KIMI_ENV_KEYS = ["KIMI_FOR_CODING_API_KEY", "KIMI_API_KEY"];
 var KIMI_URL = "https://api.kimi.com/coding/v1/usages";
 function computeKimiUsedPercent(total, used, remaining) {
-  const t2 = toNumber(total);
+  const t2 = toNumber2(total);
   if (t2 == null || t2 <= 0) return null;
-  const u = toNumber(used);
+  const u = toNumber2(used);
   if (u != null) return clampPct(u / t2 * 100);
-  const r = toNumber(remaining);
+  const r = toNumber2(remaining);
   if (r != null) return clampPct(100 - r / t2 * 100);
   return null;
 }
@@ -1687,7 +1731,7 @@ var ZAI_TOKEN_WINDOW_SECONDS = {
   6: 7 * 86400
 };
 function zaiWindowSeconds(limit) {
-  const number4 = toNumber(limit.number);
+  const number4 = toNumber2(limit.number);
   const unitSeconds = ZAI_TOKEN_WINDOW_SECONDS[Number(limit.unit)];
   if (number4 == null || unitSeconds == null) return null;
   return unitSeconds * number4;
@@ -1706,8 +1750,8 @@ function formatCreditAmount(value) {
   return `${Math.round(value / 100) / 10}k`;
 }
 function zaiCreditValueLabel(limit) {
-  const used = toNumber(limit.currentValue);
-  const total = toNumber(limit.usage);
+  const used = toNumber2(limit.currentValue);
+  const total = toNumber2(limit.usage);
   if (used == null || total == null) return null;
   return `${formatCreditAmount(used)} / ${formatCreditAmount(total)} credits`;
 }
@@ -1776,22 +1820,22 @@ var MINIMAX_CN_ENV_KEYS = ["MINIMAX_CN_CODING_PLAN_API_KEY", "MINIMAX_CN_API_KEY
 function parseMiniMaxUsage(payload, usageFieldsAreRemaining) {
   const data = asObject(payload);
   const baseResp = asObject(data?.base_resp);
-  if (baseResp && toNumber(baseResp.status_code) !== 0) return [];
+  if (baseResp && toNumber2(baseResp.status_code) !== 0) return [];
   const remains = Array.isArray(data?.model_remains) ? data.model_remains : [];
   const model = asObject(remains[0]);
   if (!model) return [];
-  let intervalTotal = toNumber(model.current_interval_total_count);
-  let intervalValue = toNumber(model.current_interval_usage_count);
-  let weeklyTotal = toNumber(model.current_weekly_total_count);
-  let weeklyValue = toNumber(model.current_weekly_usage_count);
+  let intervalTotal = toNumber2(model.current_interval_total_count);
+  let intervalValue = toNumber2(model.current_interval_usage_count);
+  let weeklyTotal = toNumber2(model.current_weekly_total_count);
+  let weeklyValue = toNumber2(model.current_weekly_usage_count);
   if (usageFieldsAreRemaining) {
     intervalValue = intervalTotal != null && intervalValue != null ? intervalTotal - intervalValue : intervalValue;
     weeklyValue = weeklyTotal != null && weeklyValue != null ? weeklyTotal - weeklyValue : weeklyValue;
   }
   const out = [];
   const intervalPercent = pct(intervalValue, intervalTotal);
-  const intervalStart = toNumber(model.start_time);
-  const intervalEnd = toNumber(model.end_time);
+  const intervalStart = toNumber2(model.start_time);
+  const intervalEnd = toNumber2(model.end_time);
   const intervalWindow = percentWindow("5h", intervalPercent, intervalEnd, intervalPercent != null ? `${intervalPercent.toFixed(0)}% used` : null);
   const intervalStartIso = intervalStart != null ? toResetTimestamp(intervalStart) : null;
   if (intervalStartIso) intervalWindow.startsAt = intervalStartIso;
@@ -1812,8 +1856,8 @@ function miniMaxFetcher(providerId, endpoint, usageFieldsAreRemaining) {
     }
     const payload = await response.json().catch(() => null);
     const baseResp = asObject(asObject(payload)?.base_resp);
-    if (baseResp && toNumber(baseResp.status_code) !== 0) {
-      throw new Error(nonEmptyString(baseResp.status_msg) ?? `MiniMax API error: ${toNumber(baseResp.status_code)}`);
+    if (baseResp && toNumber2(baseResp.status_code) !== 0) {
+      throw new Error(nonEmptyString(baseResp.status_msg) ?? `MiniMax API error: ${toNumber2(baseResp.status_code)}`);
     }
     const windows = parseMiniMaxUsage(payload, usageFieldsAreRemaining);
     if (windows.every((w) => w.percent == null)) throw new Error("MiniMax usage data could not be parsed");
@@ -1825,8 +1869,8 @@ var OPENROUTER_ENV_KEYS = ["OPENROUTER_API_KEY"];
 var OPENROUTER_URL = "https://openrouter.ai/api/v1/credits";
 function parseOpenRouterCredits(payload) {
   const credits = asObject(asObject(payload)?.data);
-  const totalCredits = toNumber(credits?.total_credits);
-  const totalUsage = toNumber(credits?.total_usage);
+  const totalCredits = toNumber2(credits?.total_credits);
+  const totalUsage = toNumber2(credits?.total_usage);
   if (totalCredits == null && totalUsage == null) return [];
   const remaining = totalCredits != null && totalUsage != null ? Math.max(0, totalCredits - totalUsage) : null;
   const valueLabel = remaining != null && totalUsage != null ? `$${fmtMoney(remaining)} left \xB7 $${fmtMoney(totalUsage)} spent` : null;
@@ -1872,13 +1916,13 @@ function parseOllamaSettingsHtml(html) {
   }
   if (out.length === 0) {
     const sessionMatch = html.match(/Session\s+usage[^0-9]*([0-9.]+)%/i);
-    if (sessionMatch) out.push(percentWindow("Session", toNumber(sessionMatch[1]), null));
+    if (sessionMatch) out.push(percentWindow("Session", toNumber2(sessionMatch[1]), null));
     const weeklyMatch = html.match(/Weekly\s+usage[^0-9]*([0-9.]+)%/i);
-    if (weeklyMatch) out.push(percentWindow("Weekly", toNumber(weeklyMatch[1]), null));
+    if (weeklyMatch) out.push(percentWindow("Weekly", toNumber2(weeklyMatch[1]), null));
     const premiumMatch = html.match(/Premium[^0-9]*([0-9]+)\s*\/\s*([0-9]+)/i);
     if (premiumMatch) {
-      const used = toNumber(premiumMatch[1]) ?? 0;
-      const total = toNumber(premiumMatch[2]) ?? 0;
+      const used = toNumber2(premiumMatch[1]) ?? 0;
+      const total = toNumber2(premiumMatch[2]) ?? 0;
       out.push(percentWindow("Premium", total > 0 ? Math.min(100, used / total * 100) : null, null, `${used} / ${total}`));
     }
   }
@@ -1917,8 +1961,8 @@ function buildCopilotWindows(payload) {
   const add = (label, snapshotRaw) => {
     const snapshot = asObject(snapshotRaw);
     if (!snapshot) return null;
-    const entitlement = toNumber(snapshot.entitlement);
-    const remaining = toNumber(snapshot.remaining);
+    const entitlement = toNumber2(snapshot.entitlement);
+    const remaining = toNumber2(snapshot.remaining);
     const percent = entitlement != null && entitlement > 0 && remaining != null ? clampPct(100 - remaining / entitlement * 100) : null;
     return percentWindow(
       label,
@@ -2098,7 +2142,7 @@ async function fetchGoogleUsage(fetchImpl = fetch) {
       for (const bucket of buckets) {
         const modelId = nonEmptyString(bucket.modelId);
         if (!modelId) continue;
-        const remainingFraction = toNumber(bucket.remainingFraction);
+        const remainingFraction = toNumber2(bucket.remainingFraction);
         const usedPercent = remainingFraction != null ? clampPct(100 - Math.round(remainingFraction * 100)) : null;
         const resetIso = toResetTimestamp(bucket.resetTime);
         const resetMs = resetIso ? Date.parse(resetIso) : NaN;
@@ -2114,7 +2158,7 @@ async function fetchGoogleUsage(fetchImpl = fetch) {
         const modelData = asObject(modelDataRaw);
         const quotaInfo = asObject(modelData?.quotaInfo);
         if (!quotaInfo) continue;
-        const remainingFraction = toNumber(quotaInfo.remainingFraction);
+        const remainingFraction = toNumber2(quotaInfo.remainingFraction);
         const usedPercent = remainingFraction != null ? clampPct(100 - Math.round(remainingFraction * 100)) : null;
         const resetIso = toResetTimestamp(quotaInfo.resetTime);
         const resetMs = resetIso ? Date.parse(resetIso) : NaN;
@@ -2298,7 +2342,7 @@ async function resolveXaiAccessToken(material, fetchImpl) {
   const data = asObject(await response.json().catch(() => null));
   const access = nonEmptyString(data?.access_token);
   if (!access) return material.accessToken;
-  const expiresIn = toNumber(data?.expires_in) ?? XAI_DEFAULT_EXPIRES_IN_SECONDS;
+  const expiresIn = toNumber2(data?.expires_in) ?? XAI_DEFAULT_EXPIRES_IN_SECONDS;
   void expiresIn;
   return access;
 }
@@ -2385,8 +2429,8 @@ function parseCommandCodeUsage(data) {
   if (limits?.limited !== false) {
     for (const [key, label] of [["fiveHour", "5h"], ["weekly", "7d"]]) {
       const limit = asObject(limits?.[key]);
-      const used = toNumber(limit?.used);
-      const cap = toNumber(limit?.cap);
+      const used = toNumber2(limit?.used);
+      const cap = toNumber2(limit?.cap);
       if (used == null && cap == null) continue;
       windows.push(percentWindow(
         label,
@@ -2397,9 +2441,9 @@ function parseCommandCodeUsage(data) {
       ));
     }
   }
-  const creditParts = [balances?.monthlyCredits, balances?.purchasedCredits, balances?.freeCredits].map(toNumber).filter((value) => value !== null);
+  const creditParts = [balances?.monthlyCredits, balances?.purchasedCredits, balances?.freeCredits].map(toNumber2).filter((value) => value !== null);
   const remaining = creditParts.length > 0 ? creditParts.reduce((sum, value) => sum + value, 0) : null;
-  const spent = toNumber(summary?.totalCost);
+  const spent = toNumber2(summary?.totalCost);
   if (spent != null && remaining != null) {
     const total = spent + remaining;
     windows.push({
@@ -2497,7 +2541,7 @@ function parseDevinUsage(payload) {
     const resetRaw = planStatus[`${field}ResetAtUnix`];
     if (remainingRaw === void 0 && resetRaw === void 0) return true;
     if (remainingRaw !== void 0) {
-      const parsed = toNumber(remainingRaw);
+      const parsed = toNumber2(remainingRaw);
       if (parsed === null || parsed < 0 || parsed > 100) return false;
       windows.push(percentWindow(label, clampPct(100 - parsed), resetRaw));
     } else {
@@ -2583,14 +2627,6 @@ var PROVIDERS = [
 ];
 var USAGE_STAT_PROVIDER_IDS = PROVIDERS.map((p) => p.id);
 var defaultCredentialResolver = (spec) => resolveCredential(spec);
-var DOLLAR_POOL_LABEL = /^\s*\$[\d,.]+\s*\/\s*\$[\d,.]+\s*left\s*$/;
-function dollarPoolRemaining(valueLabel) {
-  if (!valueLabel || !DOLLAR_POOL_LABEL.test(valueLabel)) return null;
-  return toNumber(valueLabel.match(/\$([\d,.]+)/)?.[1]?.replace(/,/g, ""));
-}
-function shortDollars(value) {
-  return value.toFixed(2).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-}
 function worstUsagePercent(windows) {
   if (!windows) return null;
   let worst = null;
@@ -2600,35 +2636,6 @@ function worstUsagePercent(windows) {
     if (worst === null || p > worst) worst = p;
   }
   return worst;
-}
-function collapsedSummary(windows, mode) {
-  if (!windows || windows.length === 0) return null;
-  const shown = (win) => {
-    if (win.percent == null) return null;
-    return (mode === "remaining" ? 100 - win.percent : win.percent).toFixed(1);
-  };
-  const isSessionWin = (label) => /(^|\b)(5h|session|rolling)\b/i.test(label);
-  const isWeeklyWin = (label) => /(^|\b)(weekly|7d)\b/i.test(label);
-  const session = windows.find((w) => isSessionWin(w.label));
-  const weekly = windows.find((w) => isWeeklyWin(w.label));
-  const n = session ? shown(session) : null;
-  const m = weekly ? shown(weekly) : null;
-  if (n != null && m != null) return `${n}%/5h ${m}%/7d`;
-  if (n != null) return `${n}%/5h`;
-  if (m != null) return `${m}%/7d`;
-  const pool = windows.find((w) => DOLLAR_POOL_LABEL.test(w.valueLabel ?? ""));
-  if (pool) {
-    const remaining = dollarPoolRemaining(pool.valueLabel);
-    const total = toNumber((pool.valueLabel ?? "").match(/\/\s*\$([\d,.]+)/)?.[1]?.replace(/,/g, ""));
-    const p = shown(pool);
-    if (p != null && remaining != null && total != null) {
-      const dollars = mode === "remaining" ? remaining : Math.max(0, total - remaining);
-      return `${p}%/${shortDollars(dollars)}$`;
-    }
-  }
-  const firstPercent = windows.map(shown).find((v) => v != null);
-  if (firstPercent != null) return `${firstPercent}%`;
-  return windows.find((w) => w.valueLabel)?.valueLabel ?? null;
 }
 function paceMarkerIndex(win, mode, width, nowMs = Date.now()) {
   const pace = windowPacePercent(win, nowMs);
@@ -3165,10 +3172,10 @@ function factoryBucketWindow(label, raw) {
   const obj = asObject2(raw);
   if (!obj) return null;
   const end = factoryWindowEnd(obj.windowEnd);
-  const seconds = toNumber(obj.secondsRemaining);
+  const seconds = toNumber2(obj.secondsRemaining);
   const expired = end == null || seconds != null && seconds <= 0;
   if (expired) return { label, percent: 0, resetsAt: null, valueLabel: null };
-  const percent = toNumber(obj.usedPercent);
+  const percent = toNumber2(obj.usedPercent);
   return {
     label,
     percent: percent == null ? null : clampPct2(percent),
@@ -3191,7 +3198,7 @@ function parseFactorySubscriptionUsage(payload) {
   if (data.extraUsageAllowed === false) {
     windows.push({ label: "Extra usage", percent: null, resetsAt: null, valueLabel: "disabled" });
   } else {
-    const cents = toNumber(data.extraUsageBalanceCents);
+    const cents = toNumber2(data.extraUsageBalanceCents);
     if (cents != null) {
       windows.push({ label: "Extra usage", percent: null, resetsAt: null, valueLabel: `$${(cents / 100).toFixed(2)} cash balance` });
     }
@@ -3257,7 +3264,7 @@ function nonEmptyString2(value) {
   return trimmed ? trimmed : null;
 }
 function tokenField(raw, key) {
-  const n = toNumber(raw[key]);
+  const n = toNumber2(raw[key]);
   return n != null && n >= 0 ? n : void 0;
 }
 function parseTokenUsage(raw) {
@@ -3286,7 +3293,7 @@ function parseDroidRecord(raw) {
     droidSessionID: nonEmptyString2(obj.droidSessionID) ?? "",
     requestID: nonEmptyString2(obj.requestID) ?? "",
     modelID: nonEmptyString2(obj.modelID) ?? "",
-    time: toNumber(obj.time) ?? 0,
+    time: toNumber2(obj.time) ?? 0,
     usage,
     total
   };
@@ -24006,7 +24013,7 @@ function ProviderUsageBlocks(props) {
   }
   const panelWidth = () => props.panelWidth ?? 38;
   function totalDollars(valueLabel) {
-    return toNumber(valueLabel?.match(/\/\s*\$([\d,.]+)/)?.[1]?.replace(/,/g, "")) ?? 0;
+    return toNumber2(valueLabel?.match(/\/\s*\$([\d,.]+)/)?.[1]?.replace(/,/g, "")) ?? 0;
   }
   return _$createComponent(Show, {
     get when() {

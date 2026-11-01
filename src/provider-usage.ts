@@ -1762,18 +1762,8 @@ export interface CredentialResolver {
 export const defaultCredentialResolver: CredentialResolver = (spec) => resolveCredential(spec)
 
 /** Dollar-pool value label produced by the Ollama Cloud new-billing parser. */
-export const DOLLAR_POOL_LABEL = /^\s*\$[\d,.]+\s*\/\s*\$[\d,.]+\s*left\s*$/
-
-/** Remaining dollars from a dollar-pool value label, null when not one. */
-export function dollarPoolRemaining(valueLabel: string | null): number | null {
-  if (!valueLabel || !DOLLAR_POOL_LABEL.test(valueLabel)) return null
-  return toNumber(valueLabel.match(/\$([\d,.]+)/)?.[1]?.replace(/,/g, ""))
-}
-
-/** Compact dollar amount without symbol: "60" / "47.5" / "12.34". */
-export function shortDollars(value: number): string {
-  return value.toFixed(2).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")
-}
+export { DOLLAR_POOL_LABEL, dollarPoolRemaining, shortDollars } from "./provider-summary.js"
+export { collapsedSummary } from "./provider-summary.js"
 
 /**
  * Highest used percent across all windows (== tightest remaining headroom),
@@ -1789,46 +1779,6 @@ export function worstUsagePercent(windows: UsageWindow[] | undefined | null): nu
     if (worst === null || p > worst) worst = p
   }
   return worst
-}
-
-/**
- * Collapsed-row summary: "n%/5h m%/7d" for the session and weekly windows.
- * Monthly/billing-cycle totals are intentionally
- * ignored in the collapsed state (they remain visible when expanded),
- * except dollar-pool windows (Ollama Cloud new billing) surface
- * "[percent]%/[credits]$". Returns null when nothing displayable
- * exists (caller falls back to status text).
- */
-export function collapsedSummary(windows: UsageWindow[] | undefined, mode: UsageDisplayMode): string | null {
-  if (!windows || windows.length === 0) return null
-  const shown = (win: UsageWindow): string | null => {
-    if (win.percent == null) return null
-    return (mode === "remaining" ? 100 - win.percent : win.percent).toFixed(1)
-  }
-  const isSessionWin = (label: string): boolean => /(^|\b)(5h|session|rolling)\b/i.test(label)
-  const isWeeklyWin = (label: string): boolean => /(^|\b)(weekly|7d)\b/i.test(label)
-  const session = windows.find(w => isSessionWin(w.label))
-  const weekly = windows.find(w => isWeeklyWin(w.label))
-  const n = session ? shown(session) : null
-  const m = weekly ? shown(weekly) : null
-  if (n != null && m != null) return `${n}%/5h ${m}%/7d`
-  if (n != null) return `${n}%/5h`
-  if (m != null) return `${m}%/7d`
-  // Dollar-pool windows (Ollama Cloud new billing): "[percent]%/[credits]$" —
-  // remaining mode shows credits left, used mode shows credits spent.
-  const pool = windows.find(w => DOLLAR_POOL_LABEL.test(w.valueLabel ?? ""))
-  if (pool) {
-    const remaining = dollarPoolRemaining(pool.valueLabel)
-    const total = toNumber((pool.valueLabel ?? "").match(/\/\s*\$([\d,.]+)/)?.[1]?.replace(/,/g, ""))
-    const p = shown(pool)
-    if (p != null && remaining != null && total != null) {
-      const dollars = mode === "remaining" ? remaining : Math.max(0, total - remaining)
-      return `${p}%/${shortDollars(dollars)}$`
-    }
-  }
-  const firstPercent = windows.map(shown).find(v => v != null)
-  if (firstPercent != null) return `${firstPercent}%`
-  return windows.find(w => w.valueLabel)?.valueLabel ?? null
 }
 
 /**

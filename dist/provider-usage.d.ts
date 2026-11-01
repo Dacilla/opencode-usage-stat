@@ -298,26 +298,14 @@ export interface CredentialResolver {
 /** Default resolver: OpenCode credential DB → auth.json → env → .env. */
 export declare const defaultCredentialResolver: CredentialResolver;
 /** Dollar-pool value label produced by the Ollama Cloud new-billing parser. */
-export declare const DOLLAR_POOL_LABEL: RegExp;
-/** Remaining dollars from a dollar-pool value label, null when not one. */
-export declare function dollarPoolRemaining(valueLabel: string | null): number | null;
-/** Compact dollar amount without symbol: "60" / "47.5" / "12.34". */
-export declare function shortDollars(value: number): string;
+export { DOLLAR_POOL_LABEL, dollarPoolRemaining, shortDollars } from "./provider-summary.js";
+export { collapsedSummary } from "./provider-summary.js";
 /**
  * Highest used percent across all windows (== tightest remaining headroom),
  * ignoring null/NaN/Infinity. Returns null when no window reports a percent.
  * Display-mode independent: percent is always "used" in UsageWindow.
  */
 export declare function worstUsagePercent(windows: UsageWindow[] | undefined | null): number | null;
-/**
- * Collapsed-row summary: "n%/5h m%/7d" for the session and weekly windows.
- * Monthly/billing-cycle totals are intentionally
- * ignored in the collapsed state (they remain visible when expanded),
- * except dollar-pool windows (Ollama Cloud new billing) surface
- * "[percent]%/[credits]$". Returns null when nothing displayable
- * exists (caller falls back to status text).
- */
-export declare function collapsedSummary(windows: UsageWindow[] | undefined, mode: UsageDisplayMode): string | null;
 /**
  * Marker cell index (0-based) for the pace position inside a bar of `width`
  * cells, oriented to the displayed percentage (used vs remaining).

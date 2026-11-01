@@ -59,6 +59,15 @@ export const panelCss = `
   white-space: nowrap;
   font-weight: 500;
 }
+.ous-plan {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: .6;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+}
 .ous-model-meta { flex: none; opacity: .55; font-variant-numeric: tabular-nums; }
 .ous-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: currentColor; }
 .ous-ok { color: var(--ous-cache); }

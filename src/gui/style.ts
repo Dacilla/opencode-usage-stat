@@ -51,6 +51,8 @@ export const panelCss = `
   font: inherit;
 }
 .ous-model-head:hover .ous-model-name { text-decoration: underline; text-underline-offset: 2px; }
+.ous-model-head:disabled { cursor: default; }
+.ous-model-head:disabled:hover .ous-model-name { text-decoration: none; }
 .ous-model-name {
   flex: 1;
   min-width: 0;

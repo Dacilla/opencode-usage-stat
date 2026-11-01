@@ -2,7 +2,7 @@ import { For, Show, createMemo, createSignal, onCleanup } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
 import type { ProviderResult, UsageWindow } from "../rpc"
 import { isOverPace, windowPacePercent } from "../pace"
-import { collapsedSummary } from "../provider-summary"
+import { collapsedSummary, DOLLAR_POOL_LABEL } from "../provider-summary"
 import { usageLevel } from "../tui-layout"
 import type { definition } from "./definition"
 import { usageState } from "./state"
@@ -108,10 +108,18 @@ export function ProviderUsage() {
         <For each={state.providers()}>
           {(provider) => {
             const worst = worstPercent(provider)
-            const open = () => !collapsed(provider.providerId)
+            const expandable = (provider.windows?.length ?? 0) > 0
+            const open = () => expandable && !collapsed(provider.providerId)
             return (
               <div class="ous-provider">
-                <button class="ous-model-head" type="button" onClick={() => toggle(provider.providerId)}>
+                <button
+                  class="ous-model-head"
+                  type="button"
+                  disabled={!expandable}
+                  onClick={() => {
+                    if (expandable) toggle(provider.providerId)
+                  }}
+                >
                   <span class={tone(worst)} />
                   <span class="ous-model-name">
                     {provider.providerName}
@@ -120,14 +128,15 @@ export function ProviderUsage() {
                     </Show>
                   </span>
                   <span class="ous-model-meta">
-                    {collapsedSummary(provider.windows, mode()) ?? provider.status} {open() ? "▾" : "▸"}
+                    {collapsedSummary(provider.windows, mode()) ?? provider.status}
+                    {expandable ? (open() ? " ▾" : " ▸") : ""}
                   </span>
                 </button>
 
                 <Show when={open()}>
                   <Show
                     when={(provider.windows?.length ?? 0) > 0}
-                    fallback={<div class="ous-muted ous-indent">{provider.error ?? provider.status}</div>}
+                    fallback={null}
                   >
                     <For each={provider.windows ?? []}>
                       {(window) => {
@@ -143,6 +152,19 @@ export function ProviderUsage() {
                         // like the TUI's hover line.
                         const [hover, setHover] = createSignal(false)
                         const paceText = () => (pace() == null ? "" : `│${Math.round(pace() ?? 0)}%`)
+                        // The pinned readout and the hover readout are the same
+                        // value; never print both.
+                        const showPace = () => state.settings()?.showPace ?? false
+                        const hoverPace = () => hover() && !showPace() && pace() != null
+                        // Percentages follow the display mode; a dollar-pool
+                        // label stays as the provider reports it.
+                        const valueText = () => {
+                          const label = window.valueLabel
+                          if (label && DOLLAR_POOL_LABEL.test(label)) return label
+                          if (window.percent == null) return label ?? "—"
+                          const shown = `${Math.round(position())}%`
+                          return mode() === "remaining" ? `${shown} ${ctx.t("providers.left")}` : shown
+                        }
                         return (
                           <div
                             class="ous-window"
@@ -152,15 +174,14 @@ export function ProviderUsage() {
                             <div class="ous-line">
                               <span class="ous-muted">{window.label}</span>
                               <span class="ous-muted">
-                                {window.valueLabel ??
-                                  (window.percent == null ? "—" : `${Math.round(position())}%`)}
-                                <Show when={state.settings()?.showPace && pace() != null}>
+                                {valueText()}
+                                <Show when={showPace() && pace() != null}>
                                   {` ${paceText()}`}
                                 </Show>
-                                <Show when={hover() && pace() != null}>
+                                <Show when={hoverPace()}>
                                   {` ${paceText()}`}
                                 </Show>
-                                <Show when={resetLabel(window, nowMs()) && !(hover() && pace() != null)}>
+                                <Show when={resetLabel(window, nowMs()) && !hoverPace()}>
                                   {` · ${ctx.t("providers.resets")} ${resetLabel(window, nowMs())}`}
                                 </Show>
                               </span>

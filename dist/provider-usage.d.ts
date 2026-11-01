@@ -107,8 +107,26 @@ export interface ClaudeCliCredential {
     token: string;
     expires: number | null;
 }
+/** Why a read of the Claude Code credential file produced no token. */
+export type ClaudeCredentialState = {
+    status: "ok";
+    credential: ClaudeCliCredential;
+} | {
+    status: "missing";
+} | {
+    status: "unreadable";
+};
 /** Claude Code credential file (~/.claude/.credentials.json, honoring CLAUDE_CONFIG_DIR). */
 export declare function claudeCliCredentialPath(): string;
+/**
+ * Read Claude Code's OAuth credential, reporting *why* it was unusable.
+ *
+ * Claude Code rewrites this file when it logs in or refreshes, so a poll can
+ * catch it mid-write. "unreadable" means the file exists but has no usable
+ * token right now, which is a transient condition rather than "not configured".
+ * The file is read-only for us; secrets are never logged.
+ */
+export declare function readClaudeCliCredential(path?: string): ClaudeCredentialState;
 /**
  * Read Claude Code's own OAuth credential ({ claudeAiOauth: { accessToken,
  * expiresAt } }, tolerating a flat shape). API-key-only / external logins are

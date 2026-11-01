@@ -453,11 +453,47 @@ export interface ClaudeCliCredential {
   expires: number | null
 }
 
+/** Why a read of the Claude Code credential file produced no token. */
+export type ClaudeCredentialState =
+  | { status: "ok"; credential: ClaudeCliCredential }
+  | { status: "missing" }
+  | { status: "unreadable" }
+
 /** Claude Code credential file (~/.claude/.credentials.json, honoring CLAUDE_CONFIG_DIR). */
 export function claudeCliCredentialPath(): string {
   const override = process.env.CLAUDE_CONFIG_DIR?.trim()
   if (override) return join(override, ".credentials.json")
   return join(homedir(), ".claude", ".credentials.json")
+}
+
+/**
+ * Read Claude Code's OAuth credential, reporting *why* it was unusable.
+ *
+ * Claude Code rewrites this file when it logs in or refreshes, so a poll can
+ * catch it mid-write. "unreadable" means the file exists but has no usable
+ * token right now, which is a transient condition rather than "not configured".
+ * The file is read-only for us; secrets are never logged.
+ */
+export function readClaudeCliCredential(path: string = claudeCliCredentialPath()): ClaudeCredentialState {
+  if (!existsSync(path)) return { status: "missing" }
+  try {
+    const raw = readFileSync(path, "utf8").trim()
+    if (!raw) return { status: "unreadable" }
+    const data = JSON.parse(raw)
+    if (!data || typeof data !== "object") return { status: "unreadable" }
+    const root = data as Record<string, unknown>
+    const oauth = root.claudeAiOauth && typeof root.claudeAiOauth === "object"
+      ? root.claudeAiOauth as Record<string, unknown>
+      : null
+    const token = nonEmptyString(
+      oauth?.accessToken ?? oauth?.access_token ?? root.accessToken ?? root.access_token,
+    )
+    if (!token) return { status: "unreadable" }
+    const expiry = toNumber(oauth?.expiresAt ?? root.expiresAt)
+    return { status: "ok", credential: { token, expires: expiry } }
+  } catch {
+    return { status: "unreadable" }
+  }
 }
 
 /**
@@ -467,25 +503,8 @@ export function claudeCliCredentialPath(): string {
  * never logged - callers receive the token in memory only.
  */
 export function resolveClaudeCliCredential(path: string = claudeCliCredentialPath()): ClaudeCliCredential | null {
-  try {
-    if (!existsSync(path)) return null
-    const raw = readFileSync(path, "utf8").trim()
-    if (!raw) return null
-    const data = JSON.parse(raw)
-    if (!data || typeof data !== "object") return null
-    const root = data as Record<string, unknown>
-    const oauth = root.claudeAiOauth && typeof root.claudeAiOauth === "object"
-      ? root.claudeAiOauth as Record<string, unknown>
-      : null
-    const token = nonEmptyString(
-      oauth?.accessToken ?? oauth?.access_token ?? root.accessToken ?? root.access_token,
-    )
-    if (!token) return null
-    const expiry = toNumber(oauth?.expiresAt ?? root.expiresAt)
-    return { token, expires: expiry }
-  } catch {
-    return null
-  }
+  const state = readClaudeCliCredential(path)
+  return state.status === "ok" ? state.credential : null
 }
 
 /** True when an error looks like an Anthropic OAuth rejection (worth retrying with the CLI token). */
@@ -1927,7 +1946,18 @@ export async function checkProviderUsage(
     // No OpenCode credential: the native Claude Agent integration stores only
     // an `external` marker, so read Claude Code's OAuth token directly.
     const cli = getClaudeCliCredential()
-    if (!cli?.token) return finishError(false, "not configured")
+    if (!cli?.token) {
+      // Distinguish "never set up" from a file caught mid-rewrite by Claude
+      // Code. Only consult the file when the real resolver is in use, so an
+      // injected credential in tests is not second-guessed by the local disk.
+      if (getClaudeCliCredential === resolveClaudeCliCredential) {
+        const state = readClaudeCliCredential()
+        if (state.status === "unreadable") {
+          return finishError(true, "Claude credential file is being rewritten — retrying")
+        }
+      }
+      return finishError(false, "not configured")
+    }
     if (isCredentialExpired(cli)) {
       return finishError(true, "Claude Code session expired — run `claude` to refresh its login")
     }

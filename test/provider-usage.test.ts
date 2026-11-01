@@ -35,6 +35,7 @@ import {
   codexCliAuthPath,
   isCodexAuthError,
   resolveClaudeCliCredential,
+  readClaudeCliCredential,
   claudeCliCredentialPath,
   isClaudeAuthError,
   checkProviderUsage,
@@ -1341,4 +1342,33 @@ test("claude carries the retry window from a 429", async () => {
   assert.equal(result.ok, false)
   assert.equal(result.retryAfterMs, 120_000)
   assert.match(result.status, /retry in 2m/i)
+})
+
+// ── Claude credential file states ──
+
+test("readClaudeCliCredential distinguishes missing from unreadable", async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs")
+  const { tmpdir } = await import("node:os")
+  const { join } = await import("node:path")
+  const dir = mkdtempSync(join(tmpdir(), "usage-stat-claude-"))
+  try {
+    const file = join(dir, ".credentials.json")
+    assert.equal(readClaudeCliCredential(file).status, "missing")
+
+    writeFileSync(file, "{ not json", "utf8")
+    assert.equal(readClaudeCliCredential(file).status, "unreadable")
+
+    writeFileSync(file, JSON.stringify({ claudeAiOauth: {} }), "utf8")
+    assert.equal(readClaudeCliCredential(file).status, "unreadable")
+
+    writeFileSync(file, JSON.stringify({ claudeAiOauth: { accessToken: "tok", expiresAt: 123 } }), "utf8")
+    const state = readClaudeCliCredential(file)
+    assert.equal(state.status, "ok")
+    if (state.status === "ok") {
+      assert.equal(state.credential.token, "tok")
+      assert.equal(state.credential.expires, 123)
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

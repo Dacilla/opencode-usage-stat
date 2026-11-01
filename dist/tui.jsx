@@ -1598,24 +1598,28 @@ function claudeCliCredentialPath() {
   if (override) return join4(override, ".credentials.json");
   return join4(homedir4(), ".claude", ".credentials.json");
 }
-function resolveClaudeCliCredential(path = claudeCliCredentialPath()) {
+function readClaudeCliCredential(path = claudeCliCredentialPath()) {
+  if (!existsSync4(path)) return { status: "missing" };
   try {
-    if (!existsSync4(path)) return null;
     const raw = readFileSync4(path, "utf8").trim();
-    if (!raw) return null;
+    if (!raw) return { status: "unreadable" };
     const data = JSON.parse(raw);
-    if (!data || typeof data !== "object") return null;
+    if (!data || typeof data !== "object") return { status: "unreadable" };
     const root = data;
     const oauth = root.claudeAiOauth && typeof root.claudeAiOauth === "object" ? root.claudeAiOauth : null;
     const token = nonEmptyString(
       oauth?.accessToken ?? oauth?.access_token ?? root.accessToken ?? root.access_token
     );
-    if (!token) return null;
+    if (!token) return { status: "unreadable" };
     const expiry = toNumber2(oauth?.expiresAt ?? root.expiresAt);
-    return { token, expires: expiry };
+    return { status: "ok", credential: { token, expires: expiry } };
   } catch {
-    return null;
+    return { status: "unreadable" };
   }
+}
+function resolveClaudeCliCredential(path = claudeCliCredentialPath()) {
+  const state = readClaudeCliCredential(path);
+  return state.status === "ok" ? state.credential : null;
 }
 function isClaudeAuthError(err) {
   const message = err instanceof Error ? err.message : String(err ?? "");
@@ -2743,7 +2747,15 @@ async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential =
   }
   if (!secret && spec.id === "claude") {
     const cli = getClaudeCliCredential();
-    if (!cli?.token) return finishError(false, "not configured");
+    if (!cli?.token) {
+      if (getClaudeCliCredential === resolveClaudeCliCredential) {
+        const state = readClaudeCliCredential();
+        if (state.status === "unreadable") {
+          return finishError(true, "Claude credential file is being rewritten \u2014 retrying");
+        }
+      }
+      return finishError(false, "not configured");
+    }
     if (isCredentialExpired(cli)) {
       return finishError(true, "Claude Code session expired \u2014 run `claude` to refresh its login");
     }

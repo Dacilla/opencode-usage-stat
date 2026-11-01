@@ -64,7 +64,8 @@
   "dependencies": {
     "@opentui/core": "^0.8.1",
     "@opentui/solid": "^0.8.1",
-    "solid-js": "^1.9.18"
+    "solid-js": "^1.9.18",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",

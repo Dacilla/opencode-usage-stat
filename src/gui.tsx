@@ -1,23 +1,27 @@
 // gui.tsx - OpenCode Desktop entry (`./gui-experimental`).
 //
 // The desktop window is a browser renderer: it has no filesystem, no SQLite and
-// no credentials. Everything this part needs is already in the host's synced
-// session store, so the panel renders live usage without any I/O. Reporting,
-// provider quotas and durability stay in the server part and arrive over RPC.
+// no credentials. Session usage comes from the host's synced store; settings,
+// provider quotas and reports come from the server part over RPC.
+import type { SetupContext } from "@opencode/plugin/gui"
 import {
-  ComposerPill,
   Command,
+  ComposerPill,
   MenuItem,
   Panel,
   Plugin,
+  SettingsPage,
   Style,
   type PanelTab,
 } from "@opencode/plugin/gui"
 import type { Data } from "@opencode/client/solid"
 import { formatTokens } from "../src/formatter"
 import { messageToTokenMessage, type TokenMessage } from "../src/token-messages"
+import type { ReportScope } from "../src/rpc"
 import { definition } from "./gui/definition"
 import { UsagePanel } from "./gui/panel"
+import { UsageSettings } from "./gui/settings"
+import { usageState } from "./gui/state"
 import { panelCss } from "./gui/style"
 import { aggregateModels, overallCacheRate, sumSessions } from "./gui/usage-data"
 
@@ -37,6 +41,49 @@ function pillLabel(store: Data | undefined, sessionID: string): string | undefin
   }
   const rate = overallCacheRate(aggregateModels(messages))
   return `${formatTokens(totals.tokens)}${rate == null ? "" : ` · ${rate.toFixed(0)}%`}`
+}
+
+async function buildReport(ctx: SetupContext<typeof definition>, scope: ReportScope, sessionID?: string): Promise<void> {
+  const pending = ctx.toast.show({
+    variant: "loading",
+    title: ctx.t("settings.reportGenerating"),
+    persistent: true,
+  })
+  try {
+    const result = await usageState(ctx).report(scope, "html", sessionID)
+    pending.dismiss()
+    ctx.toast.show({
+      variant: "success",
+      title: ctx.t("settings.reportReady"),
+      description: result.path,
+      actions: [
+        {
+          label: ctx.t("settings.open"),
+          run: () => {
+            void ctx.desktop?.reveal(result.path).then((opened) => {
+              if (!opened) ctx.system.openExternal(`file://${result.path.replace(/\\/g, "/")}`)
+            })
+          },
+        },
+      ],
+    })
+  } catch (error) {
+    pending.dismiss()
+    ctx.toast.show({
+      variant: "error",
+      title: ctx.t("settings.reportFailed"),
+      description: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
+function openPanel(ctx: SetupContext<typeof definition>): void {
+  const session = ctx.sessions.current()
+  if (!session) {
+    ctx.toast.show({ title: ctx.t("command.usage"), description: ctx.t("panel.empty") })
+    return
+  }
+  ctx.layout.open(`${ctx.id}:usage`, session, { background: true })
 }
 
 export default Plugin.define({
@@ -64,8 +111,24 @@ export default Plugin.define({
         kind: "menu",
         icon: "window-analytics",
       },
-      list: (input) => (input.open.includes("usage") ? [tab] : []),
-      render: (props) => <UsagePanel session={props.session} screen={props.screen} tab={props.tab} />,
+      list: input => (input.open.includes("usage") ? [tab] : []),
+      render: props => <UsagePanel session={props.session} screen={props.screen} tab={props.tab} />,
+    })
+
+    ctx.add(SettingsPage, {
+      id: "usage-stat",
+      icon: "sliders",
+      get title() {
+        return ctx.t("settings.title")
+      },
+      get entries() {
+        return [
+          { id: "display", title: ctx.t("settings.display"), keywords: "cost trend performance cache" },
+          { id: "providers", title: ctx.t("settings.providers"), keywords: "quota limits usage remaining" },
+          { id: "reports", title: ctx.t("settings.reports"), keywords: "html export download" },
+        ]
+      },
+      render: () => <UsageSettings />,
     })
 
     ctx.add(MenuItem, (): MenuItem => ({
@@ -74,27 +137,37 @@ export default Plugin.define({
       title: ctx.t("panel.title"),
       icon: "window-analytics",
       keybind: `${ctx.id}.usage`,
-      run: () => {
-        const session = ctx.sessions.current()
-        if (session) ctx.layout.open(`${ctx.id}:usage`, session)
-      },
+      run: () => openPanel(ctx),
     }))
 
     ctx.add(Command, (): Command => ({
       id: "usage",
       title: ctx.t("command.usage"),
       description: ctx.t("command.usage.description"),
-      keywords: "usage tokens cache cost stats report",
+      keywords: "usage tokens cache cost stats report settings",
       group: ctx.t("command.group"),
       section: "session",
       bind: "mod+shift+u",
       slash: { name: "usage", arguments: true },
       featured: true,
-      run: () => {
-        const session = ctx.sessions.current()
-        if (!session) return
-        ctx.layout.open(`${ctx.id}:usage`, session, { background: true })
-        ctx.layout.side.toggle(session)
+      run: (input) => {
+        const argument = (input ?? "").trim().toLowerCase()
+        if (argument === "settings" || argument === "config") {
+          ctx.layout.settings("usage-stat")
+          return
+        }
+        if (argument === "all" || argument === "0") {
+          void buildReport(ctx, { kind: "all" })
+          return
+        }
+        if (/^\d+$/.test(argument)) {
+          const days = Number(argument)
+          if (days >= 1 && days <= 3650) {
+            void buildReport(ctx, { kind: "days", days })
+            return
+          }
+        }
+        openPanel(ctx)
       },
     }))
 
@@ -113,5 +186,7 @@ export default Plugin.define({
         }
       },
     })
+
+    return () => usageState(ctx).dispose()
   },
 })

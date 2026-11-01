@@ -8,6 +8,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src/gui.tsx", "src/gui/**/*.ts", "src/gui/**/*.tsx", "vite.config.ts"],
+  "include": ["src/gui.tsx", "src/gui/**/*.ts", "src/gui/**/*.tsx"],
   "exclude": []
 }

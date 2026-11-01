@@ -1,4 +1,3 @@
-import type { Context } from "@opencode/plugin/tui/context";
 import type { ProgressFn } from "./queries.js";
 import type { UsageFilters, CombinedReportData, ApiCostAnalysis, SessionTokenData, ModelBreakdownItem, MessageRow, ErrorStats, OverheadStats, AgentBreakdownItem, SessionBreakdownItem, ReportSourceMeta } from "./formatter.js";
 export type ReportFormat = "html" | "text" | "json";
@@ -39,9 +38,9 @@ export interface SessionReportView {
 export declare function getDateRangeForScope(scope: ReportScope): UsageFilters;
 export declare function buildApiCost(models: ModelBreakdownItem[], reportedCost: number): ApiCostAnalysis;
 /** Build the cumulative (total) report data for a date-range scope. */
-export declare function buildCombinedData(context: Context, filters?: UsageFilters, onProgress?: ProgressFn): Promise<CombinedReportData>;
+export declare function buildCombinedData(_frontEnd: unknown, filters?: UsageFilters, onProgress?: ProgressFn): Promise<CombinedReportData>;
 /** Build a CombinedReportData covering the last N hours. */
-export declare function buildRecentHoursReportData(context: Context, hours: number, onProgress?: ProgressFn): Promise<CombinedReportData>;
+export declare function buildRecentHoursReportData(_frontEnd: unknown, hours: number, onProgress?: ProgressFn): Promise<CombinedReportData>;
 /** Plain-text summary for cumulative/date-range reports. */
 export declare function renderPeriodTextReport(data: CombinedReportData): string;
 /** Plain-text summary for the current-session report. */

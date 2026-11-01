@@ -4,14 +4,18 @@
 // (UsageRow / SessionRow in sqlite-source.ts):
 //   1. Read-only SQLite over the local opencode.db (fast path, json_extract of
 //      the few fields reports need).
-//   2. The V2 client (`context.client`) when SQLite is unavailable:
-//      - client.session.list({ limit, cursor, parentID }) -> { data, cursor }
-//      - client.message.list({ sessionID, limit, order, cursor }) -> { data, cursor }
+//   2. A usage client when SQLite is unavailable:
+//      - session.list({ limit, cursor, parentID }) -> { data, cursor }
+//      - session.get({ sessionID })                -> SessionInfo
+//      - message.list({ sessionID, limit, order, cursor }) -> { data, cursor }
 //      Message bodies are dropped right after projection.
 // All aggregates below are pure functions over those rows.
+//
+// The client is an interface rather than OpenCodeClient so the same code runs
+// in the TUI (context.client) and in the server part (ctx.session.*).
 // Adapted from opencode-usage-stat (MIT) and opencode-tokenwatch (MIT, (c) TTWK).
 
-import type { OpenCodeClient, SessionInfo, SessionMessageInfo, SessionMessageAssistant } from "@opencode/client"
+import type { SessionInfo, SessionMessageInfo, SessionMessageAssistant } from "@opencode/client"
 import type {
   AgentBreakdownItem,
   CacheSavings,
@@ -42,19 +46,43 @@ import type { LoadRange, SessionRow, UsageRow } from "./sqlite-source.js"
 
 export type { UsageRow, SessionRow } from "./sqlite-source.js"
 
-let client: OpenCodeClient | null = null
+/**
+ * The slice of the OpenCode client the aggregation needs. Both the TUI client
+ * and the server part's session domain satisfy it.
+ */
+export interface UsageClient {
+  readonly session: {
+    list(input: {
+      limit?: number
+      cursor?: string
+      parentID?: string
+      directory?: string
+    }): Promise<{ data: readonly SessionInfo[]; cursor?: { next?: string | null } | null }>
+    get(input: { sessionID: string }): Promise<SessionInfo | undefined>
+  }
+  readonly message: {
+    list(input: {
+      sessionID: string
+      limit?: number
+      order?: "asc" | "desc"
+      cursor?: string
+    }): Promise<{ data: readonly SessionMessageInfo[]; cursor?: { next?: string | null } | null }>
+  }
+}
 
-/** Bind the TUI plugin's V2 client. Must be called before any query. */
-export function setV2Client(c: OpenCodeClient): void {
+let client: UsageClient | null = null
+
+/** Bind the client used by every query. Must be called before any query. */
+export function setV2Client(c: UsageClient): void {
   client = c
   clearQueryCache()
 }
 
-export function getV2Client(): OpenCodeClient | null {
+export function getV2Client(): UsageClient | null {
   return client
 }
 
-function requireClient(): OpenCodeClient {
+function requireClient(): UsageClient {
   if (!client) throw new Error("Usage Stat client is not initialized (setV2Client not called)")
   return client
 }

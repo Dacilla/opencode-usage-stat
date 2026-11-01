@@ -8651,13 +8651,11 @@ function toCombined(report, fallbackRange) {
     perfSummary: readPersistedStats()
   };
 }
-async function buildCombinedData(context, filters = {}, onProgress) {
-  void context;
+async function buildCombinedData(_frontEnd, filters = {}, onProgress) {
   const report = await getPeriodReport(filters, void 0, onProgress);
   return toCombined(report, { start: "\u2014", end: "\u2014" });
 }
-async function buildRecentHoursReportData(context, hours, onProgress) {
-  void context;
+async function buildRecentHoursReportData(_frontEnd, hours, onProgress) {
   const now = Date.now();
   const sinceMs = now - Math.max(1, hours) * 36e5;
   const filters = { startDate: toLocalDay2(sinceMs), endDate: toLocalDay2(now) };
@@ -8796,73 +8794,64 @@ function toSessionJsonReport(data) {
   return data;
 }
 
-// src/commands.tsx
+// src/report-file.ts
 import { execSync as execSync2, spawn } from "node:child_process";
-import { existsSync as existsSync10, mkdirSync, writeFileSync as writeFileSync5, readdirSync, statSync as statSync3, unlinkSync } from "node:fs";
-import { join as join10 } from "node:path";
+import { existsSync as existsSync10, mkdirSync, readdirSync, statSync as statSync3, unlinkSync, writeFileSync as writeFileSync5 } from "node:fs";
 import { homedir as homedir9 } from "node:os";
+import { join as join10 } from "node:path";
 var REPORT_PREFIX = "usage-stat-";
+var MAX_REPORTS = 50;
 function ensureReportDir() {
   const dir = join10(homedir9(), ".opencode", "reports");
-  if (!existsSync10(dir)) mkdirSync(dir, {
-    recursive: true
-  });
+  if (!existsSync10(dir)) mkdirSync(dir, { recursive: true });
   return dir;
+}
+function cleanupOldReports(dir) {
+  try {
+    const files = readdirSync(dir).filter((file) => file.startsWith(REPORT_PREFIX) && /\.(html|txt|json)$/.test(file)).map((file) => ({ path: join10(dir, file), mtime: statSync3(join10(dir, file)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
+    for (const file of files.slice(MAX_REPORTS)) {
+      try {
+        unlinkSync(file.path);
+      } catch {
+      }
+    }
+  } catch {
+  }
+}
+function dateTimeStamp(now = /* @__PURE__ */ new Date()) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+}
+function writeReportFile(kind, ext, content) {
+  const dir = ensureReportDir();
+  const filePath = join10(dir, `${REPORT_PREFIX}${kind}-${dateTimeStamp()}.${ext}`);
+  writeFileSync5(filePath, content, "utf-8");
+  cleanupOldReports(dir);
+  return filePath;
 }
 function openInBrowser(filePath) {
   try {
     const platform = process.platform;
     if (platform === "win32") {
       try {
-        spawn("explorer.exe", [filePath], {
-          detached: true,
-          stdio: "ignore"
-        }).unref();
+        spawn("explorer.exe", [filePath], { detached: true, stdio: "ignore" }).unref();
         return;
       } catch {
       }
       try {
-        execSync2(`start "" "${filePath}"`, {
-          timeout: 5e3
-        });
+        execSync2(`start "" "${filePath}"`, { timeout: 5e3 });
       } catch {
       }
     } else if (platform === "darwin") {
-      execSync2(`open "${filePath}"`, {
-        timeout: 5e3
-      });
+      execSync2(`open "${filePath}"`, { timeout: 5e3 });
     } else {
-      execSync2(`xdg-open "${filePath}"`, {
-        timeout: 5e3
-      });
+      execSync2(`xdg-open "${filePath}"`, { timeout: 5e3 });
     }
   } catch {
   }
 }
-var MAX_REPORTS = 50;
-function cleanupOldReports(dir) {
-  try {
-    const files = readdirSync(dir).filter((f) => f.startsWith(REPORT_PREFIX) && /\.(html|txt|json)$/.test(f)).map((f) => ({
-      name: f,
-      path: join10(dir, f),
-      mtime: statSync3(join10(dir, f)).mtimeMs
-    })).sort((a, b) => b.mtime - a.mtime);
-    if (files.length > MAX_REPORTS) {
-      for (const f of files.slice(MAX_REPORTS)) {
-        try {
-          unlinkSync(f.path);
-        } catch {
-        }
-      }
-    }
-  } catch {
-  }
-}
-function dateTimeStamp() {
-  const d = /* @__PURE__ */ new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}`;
-}
+
+// src/commands.tsx
 function currentSessionId(context) {
   try {
     const route = context.ui.router.current();
@@ -8921,11 +8910,8 @@ async function buildSessionData(context, onProgress, sessionID) {
   const input = await getSessionReportInput(sessionId, onProgress);
   return await buildSessionReportData(input);
 }
-function writeReportFile(context, kind, ext, content, label, open = false) {
-  const dir = ensureReportDir();
-  const filePath = join10(dir, `${REPORT_PREFIX}${kind}-${dateTimeStamp()}.${ext}`);
-  writeFileSync5(filePath, content, "utf-8");
-  cleanupOldReports(dir);
+function writeReportFile2(context, kind, ext, content, label, open = false) {
+  const filePath = writeReportFile(kind, ext, content);
   context.ui.toast.show({
     message: `${label}: ${filePath}`,
     variant: "info"
@@ -8933,9 +8919,9 @@ function writeReportFile(context, kind, ext, content, label, open = false) {
   if (open) openInBrowser(filePath);
 }
 function writeSessionReport(context, data, format) {
-  if (format === "html") writeReportFile(context, "session", "html", generateSessionUsageHtml(data), "Report", true);
-  else if (format === "text") writeReportFile(context, "session", "txt", renderSessionTextReport(data), "Text report");
-  else writeReportFile(context, "session", "json", JSON.stringify(toSessionJsonReport(data), null, 2), "JSON");
+  if (format === "html") writeReportFile2(context, "session", "html", generateSessionUsageHtml(data), "Report", true);
+  else if (format === "text") writeReportFile2(context, "session", "txt", renderSessionTextReport(data), "Text report");
+  else writeReportFile2(context, "session", "json", JSON.stringify(toSessionJsonReport(data), null, 2), "JSON");
 }
 async function generateSessionHtmlReport(context, sessionID) {
   await runReport(context, async (onProgress) => {
@@ -9004,9 +8990,9 @@ async function showFormatMenu(context) {
   return choice;
 }
 function writePeriodReportData(context, data, format) {
-  if (format === "html") writeReportFile(context, "total", "html", generateTotalUsageHtml(data), "Report", true);
-  else if (format === "text") writeReportFile(context, "text", "txt", renderPeriodTextReport(data), "Text report");
-  else writeReportFile(context, "json", "json", JSON.stringify(toPeriodJsonReport(data), null, 2), "JSON");
+  if (format === "html") writeReportFile2(context, "total", "html", generateTotalUsageHtml(data), "Report", true);
+  else if (format === "text") writeReportFile2(context, "text", "txt", renderPeriodTextReport(data), "Text report");
+  else writeReportFile2(context, "json", "json", JSON.stringify(toPeriodJsonReport(data), null, 2), "JSON");
 }
 async function generatePeriodReport(context, scope, format) {
   await runReport(context, async (onProgress) => {

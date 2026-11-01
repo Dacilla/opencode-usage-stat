@@ -134,15 +134,13 @@ function toCombined(report: PeriodReport, fallbackRange: { start: string; end: s
 }
 
 /** Build the cumulative (total) report data for a date-range scope. */
-export async function buildCombinedData(context: Context, filters: UsageFilters = {}, onProgress?: ProgressFn): Promise<CombinedReportData> {
-  void context
+export async function buildCombinedData(_frontEnd: unknown, filters: UsageFilters = {}, onProgress?: ProgressFn): Promise<CombinedReportData> {
   const report = await getPeriodReport(filters, undefined, onProgress)
   return toCombined(report, { start: "—", end: "—" })
 }
 
 /** Build a CombinedReportData covering the last N hours. */
-export async function buildRecentHoursReportData(context: Context, hours: number, onProgress?: ProgressFn): Promise<CombinedReportData> {
-  void context
+export async function buildRecentHoursReportData(_frontEnd: unknown, hours: number, onProgress?: ProgressFn): Promise<CombinedReportData> {
   const now = Date.now()
   const sinceMs = now - Math.max(1, hours) * 3_600_000
   const filters: UsageFilters = { startDate: toLocalDay(sinceMs), endDate: toLocalDay(now) }

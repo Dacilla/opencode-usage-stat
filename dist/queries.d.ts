@@ -1,10 +1,45 @@
-import type { OpenCodeClient, SessionMessageInfo } from "@opencode/client";
+import type { SessionInfo, SessionMessageInfo } from "@opencode/client";
 import type { AgentBreakdownItem, CacheSavings, DailyBreakdownItem, ErrorStats, HourlyHeatmapItem, MessageRow, ModelBreakdownItem, ModelLatencyItem, OverheadStats, PeriodComparison, PeriodSnapshot, ProjectBreakdownItem, ProviderBreakdownItem, ReportSourceMeta, SessionBreakdownItem, SessionKindSplit, SessionReportInput, SessionTokenData, UsageFilters, UsageReport } from "./formatter.js";
 import type { LoadRange, SessionRow, UsageRow } from "./sqlite-source.js";
 export type { UsageRow, SessionRow } from "./sqlite-source.js";
-/** Bind the TUI plugin's V2 client. Must be called before any query. */
-export declare function setV2Client(c: OpenCodeClient): void;
-export declare function getV2Client(): OpenCodeClient | null;
+/**
+ * The slice of the OpenCode client the aggregation needs. Both the TUI client
+ * and the server part's session domain satisfy it.
+ */
+export interface UsageClient {
+    readonly session: {
+        list(input: {
+            limit?: number;
+            cursor?: string;
+            parentID?: string;
+            directory?: string;
+        }): Promise<{
+            data: readonly SessionInfo[];
+            cursor?: {
+                next?: string | null;
+            } | null;
+        }>;
+        get(input: {
+            sessionID: string;
+        }): Promise<SessionInfo | undefined>;
+    };
+    readonly message: {
+        list(input: {
+            sessionID: string;
+            limit?: number;
+            order?: "asc" | "desc";
+            cursor?: string;
+        }): Promise<{
+            data: readonly SessionMessageInfo[];
+            cursor?: {
+                next?: string | null;
+            } | null;
+        }>;
+    };
+}
+/** Bind the client used by every query. Must be called before any query. */
+export declare function setV2Client(c: UsageClient): void;
+export declare function getV2Client(): UsageClient | null;
 export type ProgressFn = (done: number, total: number) => void;
 export interface Dataset {
     sessions: Map<string, SessionRow>;

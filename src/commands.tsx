@@ -30,59 +30,8 @@ import {
   toPeriodJsonReport,
   toSessionJsonReport,
 } from "./report-formats.js"
-import { execSync, spawn } from "node:child_process"
-import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync, unlinkSync } from "node:fs"
-import { join } from "node:path"
-import { homedir } from "node:os"
+import { openInBrowser, writeReportFile as writeReportToDisk } from "./report-file.js"
 
-const REPORT_PREFIX = "usage-stat-"
-
-function ensureReportDir(): string {
-  const dir = join(homedir(), ".opencode", "reports")
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  return dir
-}
-
-function openInBrowser(filePath: string): void {
-  try {
-    const platform = process.platform
-    if (platform === "win32") {
-      try {
-        spawn("explorer.exe", [filePath], { detached: true, stdio: "ignore" }).unref()
-        return
-      } catch { /* fall through */ }
-      try {
-        execSync(`start "" "${filePath}"`, { timeout: 5000 })
-      } catch { /* fall through */ }
-    } else if (platform === "darwin") {
-      execSync(`open "${filePath}"`, { timeout: 5000 })
-    } else {
-      execSync(`xdg-open "${filePath}"`, { timeout: 5000 })
-    }
-  } catch { /* silently fail */ }
-}
-
-const MAX_REPORTS = 50
-
-function cleanupOldReports(dir: string): void {
-  try {
-    const files = readdirSync(dir)
-      .filter(f => f.startsWith(REPORT_PREFIX) && /\.(html|txt|json)$/.test(f))
-      .map(f => ({ name: f, path: join(dir, f), mtime: statSync(join(dir, f)).mtimeMs }))
-      .sort((a, b) => b.mtime - a.mtime)
-    if (files.length > MAX_REPORTS) {
-      for (const f of files.slice(MAX_REPORTS)) {
-        try { unlinkSync(f.path) } catch { /* ignore */ }
-      }
-    }
-  } catch { /* ignore */ }
-}
-
-function dateTimeStamp(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, "0")
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}`
-}
 
 /** Current session id from the V2 router when on a session screen. */
 function currentSessionId(context: Context): string | undefined {
@@ -145,10 +94,7 @@ async function buildSessionData(context: Context, onProgress?: ProgressFn, sessi
 }
 
 function writeReportFile(context: Context, kind: string, ext: "html" | "txt" | "json", content: string, label: string, open = false): void {
-  const dir = ensureReportDir()
-  const filePath = join(dir, `${REPORT_PREFIX}${kind}-${dateTimeStamp()}.${ext}`)
-  writeFileSync(filePath, content, "utf-8")
-  cleanupOldReports(dir)
+  const filePath = writeReportToDisk(kind, ext, content)
   context.ui.toast.show({ message: `${label}: ${filePath}`, variant: "info" })
   if (open) openInBrowser(filePath)
 }

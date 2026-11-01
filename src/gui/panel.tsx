@@ -5,6 +5,8 @@ import { formatCost, formatTokens } from "../formatter"
 import { messageToTokenMessage, type TokenMessage } from "../token-messages"
 import type { definition } from "./definition"
 import { aggregateModels, cacheStat, overhead, overallCacheRate, sumModels, sumSessions } from "./usage-data"
+import { ProviderUsage } from "./providers"
+import { usageState } from "./state"
 
 function toneClass(rate: number | null, missing: boolean): string {
   if (missing) return "ous-dot ous-missing"
@@ -27,6 +29,8 @@ function percent(rate: number | null): string {
  */
 export function UsagePanel(props: PanelProps) {
   const ctx = usePlugin<typeof definition>()
+  const state = usageState(ctx)
+  const showPricing = () => state.settings()?.showPricing ?? true
 
   const data = () => ctx.servers.get(props.session.server.id)?.data
 
@@ -102,7 +106,7 @@ export function UsagePanel(props: PanelProps) {
             <span class="ous-muted">
               {ctx.t("panel.cache")} {percent(cacheRate())}
             </span>
-            <Show when={ctx.stores.view.value.showCost && sessionTotals().cost > 0}>
+            <Show when={showPricing() && sessionTotals().cost > 0}>
               <span class="ous-muted">
                 {ctx.t("panel.cost")} {formatCost(sessionTotals().cost)}
               </span>
@@ -147,7 +151,7 @@ export function UsagePanel(props: PanelProps) {
                       <span class="ous-muted">
                         {stat.missing ? "MISSING" : percent(stat.rate)}
                       </span>
-                      <Show when={ctx.stores.view.value.showCost && row.cost > 0}>
+                      <Show when={showPricing() && row.cost > 0}>
                         <span class="ous-muted">{formatCost(row.cost)}</span>
                       </Show>
                     </div>
@@ -178,6 +182,8 @@ export function UsagePanel(props: PanelProps) {
           </Show>
         </Show>
       </Show>
+
+      <ProviderUsage />
     </div>
   )
 }

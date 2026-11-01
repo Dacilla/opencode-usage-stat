@@ -77,4 +77,48 @@ export const panelCss = `
 .ous-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
 .ous-empty { opacity: .55; padding: 20px 0; text-align: center; }
 .ous-foot { opacity: .45; font-size: 11px; }
+.ous-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  padding-top: 10px;
+  margin-top: 2px;
+}
+.ous-section {
+  font-size: 10px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  opacity: .55;
+}
+.ous-link {
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  color: inherit;
+  opacity: .6;
+  cursor: pointer;
+  font: inherit;
+}
+.ous-link:hover { opacity: 1; }
+.ous-link:disabled { cursor: default; opacity: .35; }
+.ous-provider { display: flex; flex-direction: column; gap: 4px; }
+.ous-window { display: flex; flex-direction: column; gap: 2px; padding-left: 12px; }
+.ous-indent { padding-left: 12px; }
+.ous-settings { display: flex; flex-direction: column; gap: 22px; padding: 4px 0 24px; max-width: 640px; }
+.ous-section-block { display: flex; flex-direction: column; gap: 10px; }
+.ous-section-block h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  opacity: .7;
+}
+.ous-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ous-path {
+  font-family: var(--ous-mono, monospace);
+  font-size: 11px;
+  opacity: .6;
+  overflow-wrap: anywhere;
+}
 `

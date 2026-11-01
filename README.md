@@ -137,6 +137,10 @@ The desktop part adds:
 - **Provider quotas** fetched by the server, cached for 60 seconds and shared
   across windows.
 
+Settings are stored by the server part and mirrored by both front-ends, so a
+toggle changed in the desktop applies to the running CLI immediately (and the
+other way round) over the `settingsChanged` RPC event.
+
 A report generated from the desktop is written by the server to
 `~/.opencode/reports/` and can be revealed in the file manager from the toast.
 

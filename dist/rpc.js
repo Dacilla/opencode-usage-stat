@@ -9,7 +9,9 @@ var SettingsSchema = z.object({
   providerUsageDisplay: z.enum(["used", "remaining"]),
   language: z.enum(["zh", "en", "auto"]),
   /** Per-provider overrides; empty falls back to the plugin's `providerUsage` options. */
-  providerUsage: z.record(z.string(), z.boolean())
+  providerUsage: z.record(z.string(), z.boolean()),
+  /** Where the permanent usage readout lives. */
+  usageSurface: z.enum(["header", "bottom", "pill", "off"])
 });
 var SettingsPatchSchema = SettingsSchema.partial();
 var ProviderConfigSchema = z.object({

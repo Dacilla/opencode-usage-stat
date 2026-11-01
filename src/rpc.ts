@@ -18,6 +18,8 @@ export const SettingsSchema = z.object({
   language: z.enum(["zh", "en", "auto"]),
   /** Per-provider overrides; empty falls back to the plugin's `providerUsage` options. */
   providerUsage: z.record(z.string(), z.boolean()),
+  /** Where the permanent usage readout lives. */
+  usageSurface: z.enum(["header", "bottom", "pill", "off"]),
 })
 
 export const SettingsPatchSchema = SettingsSchema.partial()

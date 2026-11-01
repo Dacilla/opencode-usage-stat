@@ -14,6 +14,12 @@ export declare const SettingsSchema: z.ZodObject<{
         zh: "zh";
     }>;
     providerUsage: z.ZodRecord<z.ZodString, z.ZodBoolean>;
+    usageSurface: z.ZodEnum<{
+        bottom: "bottom";
+        header: "header";
+        off: "off";
+        pill: "pill";
+    }>;
 }, z.core.$strip>;
 export declare const SettingsPatchSchema: z.ZodObject<{
     showPerformance: z.ZodOptional<z.ZodBoolean>;
@@ -30,6 +36,12 @@ export declare const SettingsPatchSchema: z.ZodObject<{
         zh: "zh";
     }>>;
     providerUsage: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodBoolean>>;
+    usageSurface: z.ZodOptional<z.ZodEnum<{
+        bottom: "bottom";
+        header: "header";
+        off: "off";
+        pill: "pill";
+    }>>;
 }, z.core.$strip>;
 export declare const ProviderConfigSchema: z.ZodObject<{
     id: z.ZodString;
@@ -144,6 +156,12 @@ export declare const Usage: {
                     zh: "zh";
                 }>;
                 providerUsage: z.ZodRecord<z.ZodString, z.ZodBoolean>;
+                usageSurface: z.ZodEnum<{
+                    bottom: "bottom";
+                    header: "header";
+                    off: "off";
+                    pill: "pill";
+                }>;
             }, z.core.$strip>;
         };
         settingsSet: {
@@ -163,6 +181,12 @@ export declare const Usage: {
                         zh: "zh";
                     }>>;
                     providerUsage: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodBoolean>>;
+                    usageSurface: z.ZodOptional<z.ZodEnum<{
+                        bottom: "bottom";
+                        header: "header";
+                        off: "off";
+                        pill: "pill";
+                    }>>;
                 }, z.core.$strip>;
             }, z.core.$strip>;
             output: z.ZodObject<{
@@ -180,6 +204,12 @@ export declare const Usage: {
                     zh: "zh";
                 }>;
                 providerUsage: z.ZodRecord<z.ZodString, z.ZodBoolean>;
+                usageSurface: z.ZodEnum<{
+                    bottom: "bottom";
+                    header: "header";
+                    off: "off";
+                    pill: "pill";
+                }>;
             }, z.core.$strip>;
         };
         /** Provider ids, display names and the effective enabled set. */
@@ -303,6 +333,12 @@ export declare const Usage: {
                     zh: "zh";
                 }>;
                 providerUsage: z.ZodRecord<z.ZodString, z.ZodBoolean>;
+                usageSurface: z.ZodEnum<{
+                    bottom: "bottom";
+                    header: "header";
+                    off: "off";
+                    pill: "pill";
+                }>;
             }, z.core.$strip>;
         };
     };

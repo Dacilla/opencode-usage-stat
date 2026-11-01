@@ -93,6 +93,31 @@ export const panelCss = `
   font-variant-numeric: tabular-nums;
   opacity: .6;
 }
+.ous-uibar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+.ous-uibar-wide {
+  padding: 5px 12px;
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+.ous-uibar-total { font-weight: 600; white-space: nowrap; }
+.ous-uibar-track {
+  display: flex;
+  width: 64px;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  flex: none;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.ous-uibar-track > span { height: 100%; }
+.ous-uibar-wide .ous-uibar-track { width: 180px; }
+.ous-uibar-meta { opacity: .6; white-space: nowrap; }
 .ous-empty { opacity: .55; padding: 20px 0; text-align: center; }
 .ous-foot { opacity: .45; font-size: 11px; }
 .ous-providers {

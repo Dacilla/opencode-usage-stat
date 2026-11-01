@@ -10,6 +10,13 @@ const REPORT_SCOPES: { id: string; scope: ReportScope; label: string }[] = [
   { id: "all", scope: { kind: "all" }, label: "all" },
 ]
 
+const SURFACES = [
+  { id: "header", label: "settings.surfaceHeader" },
+  { id: "bottom", label: "settings.surfaceBottom" },
+  { id: "pill", label: "settings.surfacePill" },
+  { id: "off", label: "settings.surfaceOff" },
+] as const
+
 /**
  * The desktop settings page. Toggles write straight to the server-side store, so
  * the CLI and the desktop always agree on what is on.
@@ -94,6 +101,24 @@ export function UsageSettings() {
                 checked={value().showPace}
                 onChange={showPace => void patch({ showPace })}
               />
+            </section>
+
+            <section class="ous-section-block">
+              <h3>{ctx.t("settings.surface")}</h3>
+              <div class="ous-actions">
+                <For each={SURFACES}>
+                  {entry => (
+                    <ui.Button
+                      variant={value().usageSurface === entry.id ? "contrast" : "neutral"}
+                      size="small"
+                      onClick={() => void patch({ usageSurface: entry.id })}
+                    >
+                      {ctx.t(entry.label)}
+                    </ui.Button>
+                  )}
+                </For>
+              </div>
+              <p class="ous-muted">{ctx.t("settings.surfaceHint")}</p>
             </section>
 
             <section class="ous-section-block">

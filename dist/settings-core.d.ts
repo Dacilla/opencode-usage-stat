@@ -1,5 +1,7 @@
 export type UsageDisplayMode = "used" | "remaining";
 export type LanguageSetting = "zh" | "en" | "auto";
+/** Where the always-on usage readout lives. */
+export type UsageSurface = "header" | "bottom" | "pill" | "off";
 export interface UsageStatSettings {
     showPerformance: boolean;
     showPricing: boolean;
@@ -11,13 +13,15 @@ export interface UsageStatSettings {
     language: LanguageSetting;
     /** Per-provider overrides; empty falls back to the plugin's `providerUsage` options. */
     providerUsage: Record<string, boolean>;
+    /** Permanent usage readout placement. */
+    usageSurface: UsageSurface;
 }
 export declare const SETTINGS_KEY = "usage-stat-settings";
 export declare const LEGACY_KEY = "usage-stat-config";
 export declare const DEFAULT_SETTINGS: UsageStatSettings;
 /** Seed values from plugin options (`sidebar.*`, `showPace`, `language`, `providerUsageDisplay`). */
 export declare function optionsToSettings(options: unknown): Partial<UsageStatSettings>;
-export declare const SETTING_KEYS: readonly ["showPerformance", "showPricing", "showTrend", "showPace", "providerUsageDisplay", "language"];
+export declare const SETTING_KEYS: readonly ["showPerformance", "showPricing", "showTrend", "showPace", "providerUsageDisplay", "language", "usageSurface"];
 /**
  * Values from the old `usage-stat-config` key that should seed the shared store.
  *

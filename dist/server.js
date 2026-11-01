@@ -21328,7 +21328,9 @@ var SettingsSchema = external_exports.object({
   providerUsageDisplay: external_exports.enum(["used", "remaining"]),
   language: external_exports.enum(["zh", "en", "auto"]),
   /** Per-provider overrides; empty falls back to the plugin's `providerUsage` options. */
-  providerUsage: external_exports.record(external_exports.string(), external_exports.boolean())
+  providerUsage: external_exports.record(external_exports.string(), external_exports.boolean()),
+  /** Where the permanent usage readout lives. */
+  usageSurface: external_exports.enum(["header", "bottom", "pill", "off"])
 });
 var SettingsPatchSchema = SettingsSchema.partial();
 var ProviderConfigSchema = external_exports.object({
@@ -26851,7 +26853,8 @@ var DEFAULT_SETTINGS = {
   showPace: false,
   providerUsageDisplay: "used",
   language: "auto",
-  providerUsage: {}
+  providerUsage: {},
+  usageSurface: "header"
 };
 function optionsToSettings(options) {
   const out = {};
@@ -26889,6 +26892,9 @@ function sanitize(value) {
   }
   if (value.language === "zh" || value.language === "en" || value.language === "auto") {
     out.language = value.language;
+  }
+  if (value.usageSurface === "header" || value.usageSurface === "bottom" || value.usageSurface === "pill" || value.usageSurface === "off") {
+    out.usageSurface = value.usageSurface;
   }
   if (isRecord(value.providerUsage)) {
     const usage = {};

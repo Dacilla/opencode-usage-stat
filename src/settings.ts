@@ -62,6 +62,7 @@ export function createSettingsMirror(context: Context): SettingsMirror {
       providerUsageDisplay: next.providerUsageDisplay,
       language: next.language,
       providerUsage: { ...next.providerUsage },
+      usageSurface: next.usageSurface,
     })
   }
 

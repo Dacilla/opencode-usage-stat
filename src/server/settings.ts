@@ -27,6 +27,9 @@ function sanitize(value: unknown): SettingsPatch {
   if (value.language === "zh" || value.language === "en" || value.language === "auto") {
     out.language = value.language
   }
+  if (value.usageSurface === "header" || value.usageSurface === "bottom" || value.usageSurface === "pill" || value.usageSurface === "off") {
+    out.usageSurface = value.usageSurface
+  }
   if (isRecord(value.providerUsage)) {
     const usage: Record<string, boolean> = {}
     for (const [id, enabled] of Object.entries(value.providerUsage)) {

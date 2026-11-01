@@ -11,10 +11,12 @@ import {
   Panel,
   Plugin,
   SettingsPage,
+  Slot,
   Style,
   type PanelTab,
 } from "@opencode/plugin/gui"
 import type { Data } from "@opencode/client/solid"
+import { Show } from "solid-js"
 import { formatTokens } from "../src/formatter"
 import { messageToTokenMessage, type TokenMessage } from "../src/token-messages"
 import type { ReportScope } from "../src/rpc"
@@ -23,6 +25,7 @@ import { UsagePanel } from "./gui/panel"
 import { UsageSettings } from "./gui/settings"
 import { usageState } from "./gui/state"
 import { panelCss } from "./gui/style"
+import { UsageBar } from "./gui/usage-bar"
 import { aggregateModels, overallCacheRate, sumSessions } from "./gui/usage-data"
 
 /** Session-level totals and cache rate for the composer pill, from the synced store. */
@@ -90,6 +93,28 @@ export default Plugin.define({
   ...definition,
   setup(ctx) {
     ctx.add(Style, panelCss)
+
+    const surface = () => usageState(ctx).settings()?.usageSurface ?? "header"
+
+    ctx.add(Slot, {
+      at: "session.header",
+      order: 30,
+      render: input => (
+        <Show when={surface() === "header"}>
+          <UsageBar session={input.session} />
+        </Show>
+      ),
+    })
+
+    ctx.add(Slot, {
+      at: "window.bottom",
+      order: 30,
+      render: () => (
+        <Show when={surface() === "bottom"}>
+          <UsageBar wide />
+        </Show>
+      ),
+    })
 
     const tab: PanelTab = {
       id: "usage",
@@ -175,6 +200,7 @@ export default Plugin.define({
       id: "usage",
       order: 40,
       show: (input) => {
+        if (surface() !== "pill") return undefined
         const store = ctx.servers.get(input.session.server.id)?.data
         const label = pillLabel(store, input.session.id)
         if (!label) return undefined

@@ -4,6 +4,8 @@
 // mirror and the desktop state so all three agree on the same fields.
 export type UsageDisplayMode = "used" | "remaining"
 export type LanguageSetting = "zh" | "en" | "auto"
+/** Where the always-on usage readout lives. */
+export type UsageSurface = "header" | "bottom" | "pill" | "off"
 
 export interface UsageStatSettings {
   showPerformance: boolean
@@ -16,6 +18,8 @@ export interface UsageStatSettings {
   language: LanguageSetting
   /** Per-provider overrides; empty falls back to the plugin's `providerUsage` options. */
   providerUsage: Record<string, boolean>
+  /** Permanent usage readout placement. */
+  usageSurface: UsageSurface
 }
 
 export const SETTINGS_KEY = "usage-stat-settings"
@@ -32,6 +36,7 @@ export const DEFAULT_SETTINGS: UsageStatSettings = {
   providerUsageDisplay: "used",
   language: "auto",
   providerUsage: {},
+  usageSurface: "header",
 }
 
 /** Seed values from plugin options (`sidebar.*`, `showPace`, `language`, `providerUsageDisplay`). */
@@ -60,6 +65,7 @@ export const SETTING_KEYS = [
   "showPace",
   "providerUsageDisplay",
   "language",
+  "usageSurface",
 ] as const
 
 /**

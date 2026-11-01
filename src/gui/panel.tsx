@@ -2,11 +2,11 @@ import type { PanelProps } from "@opencode/plugin/gui"
 import { usePlugin } from "@opencode/plugin/gui"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { formatCost, formatDuration, formatTokens } from "../formatter"
-import { messageToTokenMessage, type TokenMessage } from "../token-messages"
 import type { PerfSnapshot } from "../rpc"
 import type { definition } from "./definition"
-import { aggregateModels, cacheStat, overhead, overallCacheRate, sumModels, sumSessions } from "./usage-data"
+import { cacheStat, overhead } from "./usage-data"
 import { ProviderUsage } from "./providers"
+import { createSessionUsage } from "./session-usage"
 import { usageState } from "./state"
 
 function toneClass(rate: number | null, missing: boolean): string {
@@ -40,38 +40,13 @@ export function UsagePanel(props: PanelProps) {
 
   const data = () => ctx.servers.get(props.session.server.id)?.data
 
-  const family = createMemo(() => {
-    const store = data()
-    const root = props.session.id
-    if (!store) return [root]
-    const members = store.session.family(root)
-    return members.length > 0 ? members : [root]
-  })
-
-  const messages = createMemo(() => {
-    const store = data()
-    if (!store) return [] as TokenMessage[]
-    const collected: TokenMessage[] = []
-    for (const sessionID of family()) {
-      for (const message of store.session.message.list(sessionID)) {
-        const tokenMessage = messageToTokenMessage(message, sessionID)
-        if (tokenMessage) collected.push(tokenMessage)
-      }
-    }
-    return collected
-  })
-
-  const rows = createMemo(() => aggregateModels(messages()))
-  const messageTotals = createMemo(() => sumModels(rows()))
-  const sessionTotals = createMemo(() => {
-    const store = data()
-    if (!store) return sumModels(rows())
-    const totals = sumSessions(family().map(sessionID => store.session.get(sessionID)))
-    totals.requests = messageTotals().requests
-    return totals
-  })
+  const usage = createSessionUsage(ctx, () => props.session)
+  const family = usage.family
+  const rows = usage.rows
+  const messageTotals = usage.messageTotals
+  const sessionTotals = usage.totals
+  const cacheRate = usage.cacheRate
   const extra = createMemo(() => overhead(sessionTotals(), messageTotals()))
-  const cacheRate = createMemo(() => overallCacheRate(rows()))
 
   // Performance statistics come from the persisted perf log via the server.
   // Steps still in flight are not on disk yet; they appear once settled.

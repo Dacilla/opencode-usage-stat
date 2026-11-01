@@ -554,8 +554,9 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
                   </Show>
 
                   <Show when={state.result !== null && !state.result.ok}>
-                    {/* The header already carries the status line; do not
-                        repeat it. Keep only the actionable hint. */}
+                    {/* The header already carries the status. Printing it
+                        again below is the duplication we just removed; the
+                        truncation is the price of a narrow sidebar. */}
                     <Show when={state.result !== null && !state.result?.configured}>
                       <text fg={dimColor()}>{t("providerEnableHint")}</text>
                     </Show>

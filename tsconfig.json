@@ -4,6 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "outDir": "dist",
+    "rootDir": "src",
     "declaration": true,
     "emitDeclarationOnly": true,
     "strict": true,
@@ -11,6 +12,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
+    "types": ["node"],
     "jsx": "preserve",
     "jsxImportSource": "@opentui/solid"
   },

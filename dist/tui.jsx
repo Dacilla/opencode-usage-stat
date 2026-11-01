@@ -3474,15 +3474,6 @@ async function checkDroidUsage(query, family, options = {}) {
 
 // src/theme-map.ts
 import { RGBA } from "@opentui/core";
-function hueLike(theme, hue, reference) {
-  try {
-    const step = reference ? theme.source(reference)?.step : void 0;
-    if (step == null) return void 0;
-    return theme.hue[hue]?.[step];
-  } catch {
-    return void 0;
-  }
-}
 function resolveThemeColors(theme) {
   const primary = theme.text?.base ?? RGBA.fromInts(200, 210, 230, 255);
   const muted = theme.text?.muted ?? RGBA.fromInts(140, 150, 170, 255);
@@ -3496,8 +3487,8 @@ function resolveThemeColors(theme) {
   const cyan = RGBA.fromInts(80, 190, 255, 255);
   const border = theme.border?.base ?? RGBA.fromInts(55, 65, 80, 255);
   const distCache = green;
-  const distInput = hueLike(theme, "accent", success2) ?? warning ?? RGBA.fromInts(255, 152, 0, 255);
-  const distOutput = hueLike(theme, "interactive", success2) ?? RGBA.fromInts(66, 135, 245, 255);
+  const distInput = RGBA.fromInts(255, 152, 0, 255);
+  const distOutput = RGBA.fromInts(66, 135, 245, 255);
   return { primary, muted, dim, green, red, amber, purple, cyan, border, distCache, distInput, distOutput };
 }
 
@@ -24151,22 +24142,17 @@ function ProviderUsageBlocks(props) {
                     return _$memo(() => state.result !== null)() && !state.result.ok;
                   },
                   get children() {
-                    return [(() => {
-                      var _el$11 = _$createElement("text");
-                      _$insert(_el$11, () => state.result?.status ?? "");
-                      _$effect((_$p) => _$setProp(_el$11, "fg", redColor(), _$p));
-                      return _el$11;
-                    })(), _$createComponent(Show, {
+                    return _$createComponent(Show, {
                       get when() {
                         return _$memo(() => state.result !== null)() && !state.result?.configured;
                       },
                       get children() {
-                        var _el$12 = _$createElement("text");
-                        _$insert(_el$12, () => t("providerEnableHint"));
-                        _$effect((_$p) => _$setProp(_el$12, "fg", dimColor(), _$p));
-                        return _el$12;
+                        var _el$11 = _$createElement("text");
+                        _$insert(_el$11, () => t("providerEnableHint"));
+                        _$effect((_$p) => _$setProp(_el$11, "fg", dimColor(), _$p));
+                        return _el$11;
                       }
-                    })];
+                    });
                   }
                 }), null);
                 _$insert(_el$9, _$createComponent(Show, {
@@ -24223,12 +24209,12 @@ function ProviderUsageBlocks(props) {
                                 return parts();
                               },
                               children: (part) => (() => {
-                                var _el$13 = _$createElement("span");
-                                _$insert(_el$13, () => part.text);
-                                _$effect((_$p) => _$setProp(_el$13, "style", {
+                                var _el$12 = _$createElement("span");
+                                _$insert(_el$12, () => part.text);
+                                _$effect((_$p) => _$setProp(_el$12, "style", {
                                   fg: part.kind === "filled" ? winColor() : part.kind === "marker" ? paceColor() : dimColor()
                                 }, _$p));
-                                return _el$13;
+                                return _el$12;
                               })()
                             });
                             const poolCredits = isDollarPool ? displayMode() === "remaining" ? dollarPoolRemaining(win.valueLabel) : Math.max(0, totalDollars(win.valueLabel) - (dollarPoolRemaining(win.valueLabel) ?? 0)) : null;
@@ -24237,140 +24223,140 @@ function ProviderUsageBlocks(props) {
                               when: !isDollarPool,
                               get fallback() {
                                 return (() => {
-                                  var _el$18 = _$createElement("box"), _el$19 = _$createElement("text"), _el$20 = _$createElement("span"), _el$21 = _$createElement("text"), _el$22 = _$createElement("span");
+                                  var _el$17 = _$createElement("box"), _el$18 = _$createElement("text"), _el$19 = _$createElement("span"), _el$20 = _$createElement("text"), _el$21 = _$createElement("span");
+                                  _$insertNode(_el$17, _el$18);
+                                  _$insertNode(_el$17, _el$20);
+                                  _$setProp(_el$17, "flexDirection", "column");
                                   _$insertNode(_el$18, _el$19);
-                                  _$insertNode(_el$18, _el$21);
-                                  _$setProp(_el$18, "flexDirection", "column");
-                                  _$insertNode(_el$19, _el$20);
-                                  _$setProp(_el$19, "wrapMode", "none");
-                                  _$spread(_el$19, _$mergeProps({
+                                  _$setProp(_el$18, "wrapMode", "none");
+                                  _$spread(_el$18, _$mergeProps({
                                     get fg() {
                                       return mutedColor();
                                     }
                                   }, rowMouse), true);
-                                  _$insert(_el$19, paddedLabel, _el$20);
-                                  _$insert(_el$19, renderBar, _el$20);
-                                  _$insert(_el$20, percentSuffix);
-                                  _$insertNode(_el$21, _el$22);
-                                  _$setProp(_el$21, "wrapMode", "none");
-                                  _$insert(_el$21, () => " ".repeat(labelWidth()), _el$22);
-                                  _$insert(_el$22, () => truncateToWidth(`${shortDollars(poolCredits ?? 0)}$/${shortDollars(poolAllowance ?? 0)}$`, Math.max(1, contentWidth() - labelWidth())));
+                                  _$insert(_el$18, paddedLabel, _el$19);
+                                  _$insert(_el$18, renderBar, _el$19);
+                                  _$insert(_el$19, percentSuffix);
+                                  _$insertNode(_el$20, _el$21);
+                                  _$setProp(_el$20, "wrapMode", "none");
+                                  _$insert(_el$20, () => " ".repeat(labelWidth()), _el$21);
+                                  _$insert(_el$21, () => truncateToWidth(`${shortDollars(poolCredits ?? 0)}$/${shortDollars(poolAllowance ?? 0)}$`, Math.max(1, contentWidth() - labelWidth())));
                                   _$effect((_p$) => {
                                     var _v$5 = {
                                       fg: winColor()
                                     }, _v$6 = dimColor(), _v$7 = {
                                       fg: winColor()
                                     };
-                                    _v$5 !== _p$.e && (_p$.e = _$setProp(_el$20, "style", _v$5, _p$.e));
-                                    _v$6 !== _p$.t && (_p$.t = _$setProp(_el$21, "fg", _v$6, _p$.t));
-                                    _v$7 !== _p$.a && (_p$.a = _$setProp(_el$22, "style", _v$7, _p$.a));
+                                    _v$5 !== _p$.e && (_p$.e = _$setProp(_el$19, "style", _v$5, _p$.e));
+                                    _v$6 !== _p$.t && (_p$.t = _$setProp(_el$20, "fg", _v$6, _p$.t));
+                                    _v$7 !== _p$.a && (_p$.a = _$setProp(_el$21, "style", _v$7, _p$.a));
                                     return _p$;
                                   }, {
                                     e: void 0,
                                     t: void 0,
                                     a: void 0
                                   });
-                                  return _el$18;
+                                  return _el$17;
                                 })();
                               },
                               get children() {
-                                var _el$14 = _$createElement("box"), _el$15 = _$createElement("text"), _el$16 = _$createElement("span");
+                                var _el$13 = _$createElement("box"), _el$14 = _$createElement("text"), _el$15 = _$createElement("span");
+                                _$insertNode(_el$13, _el$14);
+                                _$setProp(_el$13, "flexDirection", "column");
                                 _$insertNode(_el$14, _el$15);
-                                _$setProp(_el$14, "flexDirection", "column");
-                                _$insertNode(_el$15, _el$16);
-                                _$setProp(_el$15, "wrapMode", "none");
-                                _$spread(_el$15, _$mergeProps({
+                                _$setProp(_el$14, "wrapMode", "none");
+                                _$spread(_el$14, _$mergeProps({
                                   get fg() {
                                     return mutedColor();
                                   }
                                 }, rowMouse), true);
-                                _$insert(_el$15, paddedLabel, _el$16);
-                                _$insert(_el$15, renderBar, _el$16);
-                                _$insert(_el$16, percentSuffix);
-                                _$insert(_el$15, (() => {
+                                _$insert(_el$14, paddedLabel, _el$15);
+                                _$insert(_el$14, renderBar, _el$15);
+                                _$insert(_el$15, percentSuffix);
+                                _$insert(_el$14, (() => {
                                   var _c$ = _$memo(() => !!line1Pace());
                                   return () => _c$() ? (() => {
-                                    var _el$23 = _$createElement("span");
-                                    _$insert(_el$23, line1Pace);
-                                    _$effect((_$p) => _$setProp(_el$23, "style", {
+                                    var _el$22 = _$createElement("span");
+                                    _$insert(_el$22, line1Pace);
+                                    _$effect((_$p) => _$setProp(_el$22, "style", {
                                       fg: dimColor()
                                     }, _$p));
-                                    return _el$23;
+                                    return _el$22;
                                   })() : null;
                                 })(), null);
-                                _$insert(_el$14, _$createComponent(Show, {
+                                _$insert(_el$13, _$createComponent(Show, {
                                   get when() {
                                     return resetLine();
                                   },
                                   get children() {
-                                    var _el$17 = _$createElement("text");
-                                    _$setProp(_el$17, "wrapMode", "none");
-                                    _$spread(_el$17, _$mergeProps({
+                                    var _el$16 = _$createElement("text");
+                                    _$setProp(_el$16, "wrapMode", "none");
+                                    _$spread(_el$16, _$mergeProps({
                                       get fg() {
                                         return dimColor();
                                       }
                                     }, rowMouse), true);
-                                    _$insert(_el$17, () => " ".repeat(labelWidth()), null);
-                                    _$insert(_el$17, resetLine, null);
-                                    return _el$17;
+                                    _$insert(_el$16, () => " ".repeat(labelWidth()), null);
+                                    _$insert(_el$16, resetLine, null);
+                                    return _el$16;
                                   }
                                 }), null);
-                                _$effect((_$p) => _$setProp(_el$16, "style", {
+                                _$effect((_$p) => _$setProp(_el$15, "style", {
                                   fg: winColor()
                                 }, _$p));
-                                return _el$14;
+                                return _el$13;
                               }
                             });
                           }
                           if (win.valueLabel) {
                             return (() => {
-                              var _el$24 = _$createElement("text"), _el$25 = _$createElement("span");
-                              _$insertNode(_el$24, _el$25);
-                              _$insert(_el$24, () => padEndToWidth(label, labelWidth()), _el$25);
-                              _$insert(_el$25, () => truncateToWidth(win.valueLabel, Math.max(1, contentWidth() - labelWidth())));
+                              var _el$23 = _$createElement("text"), _el$24 = _$createElement("span");
+                              _$insertNode(_el$23, _el$24);
+                              _$insert(_el$23, () => padEndToWidth(label, labelWidth()), _el$24);
+                              _$insert(_el$24, () => truncateToWidth(win.valueLabel, Math.max(1, contentWidth() - labelWidth())));
                               _$effect((_p$) => {
                                 var _v$8 = mutedColor(), _v$9 = {
                                   fg: greenColor()
                                 };
-                                _v$8 !== _p$.e && (_p$.e = _$setProp(_el$24, "fg", _v$8, _p$.e));
-                                _v$9 !== _p$.t && (_p$.t = _$setProp(_el$25, "style", _v$9, _p$.t));
+                                _v$8 !== _p$.e && (_p$.e = _$setProp(_el$23, "fg", _v$8, _p$.e));
+                                _v$9 !== _p$.t && (_p$.t = _$setProp(_el$24, "style", _v$9, _p$.t));
                                 return _p$;
                               }, {
                                 e: void 0,
                                 t: void 0
                               });
-                              return _el$24;
+                              return _el$23;
                             })();
                           }
                           return (() => {
-                            var _el$26 = _$createElement("text"), _el$27 = _$createTextNode(`\u2014`);
-                            _$insertNode(_el$26, _el$27);
-                            _$insert(_el$26, () => padEndToWidth(label, labelWidth()), _el$27);
-                            _$effect((_$p) => _$setProp(_el$26, "fg", mutedColor(), _$p));
-                            return _el$26;
+                            var _el$25 = _$createElement("text"), _el$26 = _$createTextNode(`\u2014`);
+                            _$insertNode(_el$25, _el$26);
+                            _$insert(_el$25, () => padEndToWidth(label, labelWidth()), _el$26);
+                            _$effect((_$p) => _$setProp(_el$25, "fg", mutedColor(), _$p));
+                            return _el$25;
                           })();
                         }
                         if (droidGroup) {
                           return (() => {
-                            var _el$28 = _$createElement("box"), _el$31 = _$createElement("box");
-                            _$insertNode(_el$28, _el$31);
-                            _$setProp(_el$28, "flexDirection", "column");
-                            _$insert(_el$28, _$createComponent(Show, {
+                            var _el$27 = _$createElement("box"), _el$30 = _$createElement("box");
+                            _$insertNode(_el$27, _el$30);
+                            _$setProp(_el$27, "flexDirection", "column");
+                            _$insert(_el$27, _$createComponent(Show, {
                               get when() {
                                 return !state.result?.windows?.[index() - 1]?.label.startsWith(`${droidGroup[1]} \xB7 `);
                               },
                               get children() {
-                                var _el$29 = _$createElement("text"), _el$30 = _$createTextNode(`:`);
-                                _$insertNode(_el$29, _el$30);
-                                _$insert(_el$29, () => droidGroup[1], _el$30);
-                                _$effect((_$p) => _$setProp(_el$29, "fg", mutedColor(), _$p));
-                                return _el$29;
+                                var _el$28 = _$createElement("text"), _el$29 = _$createTextNode(`:`);
+                                _$insertNode(_el$28, _el$29);
+                                _$insert(_el$28, () => droidGroup[1], _el$29);
+                                _$effect((_$p) => _$setProp(_el$28, "fg", mutedColor(), _$p));
+                                return _el$28;
                               }
-                            }), _el$31);
-                            _$setProp(_el$31, "flexDirection", "column");
-                            _$setProp(_el$31, "paddingLeft", 1);
-                            _$insert(_el$31, renderWindow);
-                            return _el$28;
+                            }), _el$30);
+                            _$setProp(_el$30, "flexDirection", "column");
+                            _$setProp(_el$30, "paddingLeft", 1);
+                            _$insert(_el$30, renderWindow);
+                            return _el$27;
                           })();
                         }
                         return renderWindow();

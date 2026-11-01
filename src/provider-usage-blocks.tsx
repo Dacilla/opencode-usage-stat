@@ -554,7 +554,8 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
                   </Show>
 
                   <Show when={state.result !== null && !state.result.ok}>
-                    <text fg={redColor()}>{state.result?.status ?? ""}</text>
+                    {/* The header already carries the status line; do not
+                        repeat it. Keep only the actionable hint. */}
                     <Show when={state.result !== null && !state.result?.configured}>
                       <text fg={dimColor()}>{t("providerEnableHint")}</text>
                     </Show>

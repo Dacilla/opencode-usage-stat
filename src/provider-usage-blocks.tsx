@@ -412,7 +412,7 @@ export function ProviderUsageBlocks(props: ProviderUsageBlocksProps): JSX.Elemen
   })
 
   const ids = enabledIds()
-    if (ids.length > 0) {
+  if (ids.length > 0) {
     for (const id of ids) {
       void refreshOne(id)
     }

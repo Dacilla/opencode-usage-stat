@@ -121,7 +121,7 @@ export const panelCss = `
   overflow: hidden;
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
-.ous-pbar-track > span { display: block; height: 100%; }
+.ous-pbar-track > span { display: block; height: 100%; transition: width 260ms ease; }
 .ous-pace {
   position: absolute;
   top: -3px;
@@ -129,6 +129,7 @@ export const panelCss = `
   width: 2px;
   border-radius: 1px;
   pointer-events: auto;
+  transition: left 260ms ease, background-color 260ms ease;
 }
 .ous-indent { padding-left: 12px; }
 .ous-settings { display: flex; flex-direction: column; gap: 22px; padding: 4px 0 24px; max-width: 640px; }

@@ -29,7 +29,10 @@ export interface ThemeColorMap {
 export function resolveThemeColors(theme: ResolvedTheme): ThemeColorMap {
   const primary = theme.text?.base ?? RGBA.fromInts(200, 210, 230, 255)
   const muted = theme.text?.muted ?? RGBA.fromInts(140, 150, 170, 255)
-  const dim = theme.text?.faint ?? RGBA.fromInts(100, 108, 122, 255)
+  // `faint` is nearly invisible in the default dark theme. The TUI has always
+  // used one fixed grey for bar tracks, KPI labels and the overhead line, and
+  // that read is worth keeping over strict theme fidelity.
+  const dim = RGBA.fromInts(100, 108, 122, 255)
   const success = theme.text?.feedback?.success?.base
   const warning = theme.text?.feedback?.warning?.base
   const green = success ?? RGBA.fromInts(63, 185, 80, 255)

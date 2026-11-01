@@ -3477,7 +3477,7 @@ import { RGBA } from "@opentui/core";
 function resolveThemeColors(theme) {
   const primary = theme.text?.base ?? RGBA.fromInts(200, 210, 230, 255);
   const muted = theme.text?.muted ?? RGBA.fromInts(140, 150, 170, 255);
-  const dim = theme.text?.faint ?? RGBA.fromInts(100, 108, 122, 255);
+  const dim = RGBA.fromInts(100, 108, 122, 255);
   const success2 = theme.text?.feedback?.success?.base;
   const warning = theme.text?.feedback?.warning?.base;
   const green = success2 ?? RGBA.fromInts(63, 185, 80, 255);

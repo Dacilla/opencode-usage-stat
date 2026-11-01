@@ -74,6 +74,14 @@ await Promise.all([
     entryPoints: ["src/server.ts"],
     outfile: "dist/server.js",
   }),
+  // Published as `./rpc` so other plugins and clients can import the contract
+  // without loading the implementation.
+  build({
+    ...common,
+    entryPoints: ["src/rpc.ts"],
+    outfile: "dist/rpc.js",
+    external: [...external, "@opencode/plugin/rpc", "zod"],
+  }),
 ])
 
-console.log("✓ esbuild: dist/tui.jsx + dist/server.js")
+console.log("✓ esbuild: dist/tui.jsx + dist/server.js + dist/rpc.js")

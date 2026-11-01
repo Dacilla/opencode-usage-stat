@@ -19,6 +19,10 @@
       "import": "./dist/tui.jsx"
     },
     "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": {
+      "types": "./dist/rpc.d.ts",
+      "import": "./dist/rpc.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

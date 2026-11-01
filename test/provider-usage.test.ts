@@ -1286,3 +1286,59 @@ test("codex does not retry with the CLI credential on non-auth errors", async ()
   assert.equal(result.ok, false)
   assert.equal(calls, 1)
 })
+
+// ── Claude credential expiry ──
+
+test("claude reports an expired Claude Code login without calling the API", async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls++
+    return new Response("{}", { status: 200 })
+  }) as unknown as typeof fetch
+
+  const result = await checkProviderUsage(
+    "claude",
+    fetchImpl,
+    fakeCredential(null),
+    () => null,
+    () => ({ token: "expired-token", expires: Date.now() - 60_000 }),
+  )
+
+  assert.equal(calls, 0)
+  assert.equal(result.ok, false)
+  assert.equal(result.configured, true)
+  assert.match(result.status, /expired/i)
+  assert.match(result.status, /claude/i)
+})
+
+test("claude prefers a valid CLI login over an expired stored token", async () => {
+  const seen: string[] = []
+  const fetchImpl = (async (_url: string, init?: RequestInit) => {
+    seen.push(String((init?.headers as Record<string, string> | undefined)?.Authorization ?? ""))
+    return new Response(JSON.stringify({ limits: [] }), { status: 200 })
+  }) as unknown as typeof fetch
+
+  await checkProviderUsage(
+    "claude",
+    fetchImpl,
+    () => ({ value: "stale", accountId: null, refresh: null, expires: Date.now() - 1_000, source: "auth" }),
+    () => null,
+    () => ({ token: "fresh-token", expires: Date.now() + 3_600_000 }),
+  )
+
+  assert.deepEqual(seen, ["Bearer fresh-token"])
+})
+
+test("claude carries the retry window from a 429", async () => {
+  const fetchImpl = (async () =>
+    new Response(JSON.stringify({ error: { type: "rate_limit_error" } }), {
+      status: 429,
+      headers: { "retry-after": "120" },
+    })) as unknown as typeof fetch
+
+  const result = await checkProviderUsage("claude", fetchImpl, fakeCredential("secret"), () => null, () => null)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.retryAfterMs, 120_000)
+  assert.match(result.status, /retry in 2m/i)
+})

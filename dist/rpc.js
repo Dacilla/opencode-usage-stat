@@ -36,7 +36,9 @@ var ProviderResultSchema = z.object({
   status: z.string(),
   error: z.string().optional(),
   windows: z.array(UsageWindowSchema).optional(),
-  planLabel: z.string().nullable().optional()
+  planLabel: z.string().nullable().optional(),
+  /** Suppress polling until this delay elapses (from a provider's Retry-After). */
+  retryAfterMs: z.number().optional()
 });
 var ReportScopeSchema = z.object({
   kind: z.enum(["session", "5h", "7d", "30d", "all", "days"]),

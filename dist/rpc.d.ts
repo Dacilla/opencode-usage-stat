@@ -71,6 +71,7 @@ export declare const ProviderResultSchema: z.ZodObject<{
         startsAt: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     }, z.core.$strip>>>;
     planLabel: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    retryAfterMs: z.ZodOptional<z.ZodNumber>;
 }, z.core.$strip>;
 export declare const ReportScopeSchema: z.ZodObject<{
     kind: z.ZodEnum<{
@@ -243,6 +244,7 @@ export declare const Usage: {
                     startsAt: z.ZodOptional<z.ZodNullable<z.ZodString>>;
                 }, z.core.$strip>>>;
                 planLabel: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+                retryAfterMs: z.ZodOptional<z.ZodNumber>;
             }, z.core.$strip>>;
         };
         /** Build a report on the server and return where it landed. */

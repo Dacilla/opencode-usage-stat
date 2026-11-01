@@ -49,6 +49,8 @@ export const ProviderResultSchema = z.object({
   error: z.string().optional(),
   windows: z.array(UsageWindowSchema).optional(),
   planLabel: z.string().nullable().optional(),
+  /** Suppress polling until this delay elapses (from a provider's Retry-After). */
+  retryAfterMs: z.number().optional(),
 })
 
 export const ReportScopeSchema = z.object({

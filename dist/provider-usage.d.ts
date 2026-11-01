@@ -21,6 +21,8 @@ export interface ProviderUsageResult {
     error?: string;
     windows?: UsageWindow[];
     planLabel?: string | null;
+    /** When set, do not poll this provider again before this delay elapses. */
+    retryAfterMs?: number;
 }
 /** How collapsed headers present usage percentages. */
 export type UsageDisplayMode = "used" | "remaining";
@@ -123,6 +125,15 @@ export declare function isClaudeAuthError(err: unknown): boolean;
  *   spend (extra usage credits) becomes an "Extra Usage" row.
  */
 export declare function parseClaudeUsage(payload: unknown): UsageWindow[];
+/** A rate-limited provider response that carries its own retry window. */
+export declare class ProviderRateLimitError extends Error {
+    readonly retryAfterMs?: number | undefined;
+    constructor(message: string, retryAfterMs?: number | undefined);
+}
+/** True when a stored OAuth access token is past (or within a minute of) expiry. */
+export declare function isCredentialExpired(credential: {
+    expires: number | null;
+} | null | undefined): boolean;
 export declare function fetchClaudeUsage(accessToken: string, fetchImpl?: FetchLike): Promise<UsageWindow[]>;
 export declare const KIMI_ALIASES: string[];
 export declare const KIMI_ENV_KEYS: string[];

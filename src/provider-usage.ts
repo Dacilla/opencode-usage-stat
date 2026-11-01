@@ -66,6 +66,8 @@ export interface ProviderUsageResult {
   error?: string
   windows?: UsageWindow[]
   planLabel?: string | null
+  /** When set, do not poll this provider again before this delay elapses. */
+  retryAfterMs?: number
 }
 
 /** How collapsed headers present usage percentages. */
@@ -549,6 +551,28 @@ export function parseClaudeUsage(payload: unknown): UsageWindow[] {
   return out.filter((w, i) => out.findIndex(o => o.label === w.label) === i)
 }
 
+/** A rate-limited provider response that carries its own retry window. */
+export class ProviderRateLimitError extends Error {
+  constructor(message: string, readonly retryAfterMs?: number) {
+    super(message)
+    this.name = "ProviderRateLimitError"
+  }
+}
+
+/** True when a stored OAuth access token is past (or within a minute of) expiry. */
+export function isCredentialExpired(credential: { expires: number | null } | null | undefined): boolean {
+  if (!credential || typeof credential.expires !== "number" || !Number.isFinite(credential.expires)) return false
+  return credential.expires <= Date.now() + 60_000
+}
+
+function formatRetryAfter(ms: number | undefined): string {
+  if (ms == null || !Number.isFinite(ms) || ms <= 0) return ""
+  const minutes = Math.round(ms / 60_000)
+  if (minutes < 60) return ` — retry in ${Math.max(1, minutes)}m`
+  const hours = Math.round(minutes / 60)
+  return ` — retry in ${hours}h`
+}
+
 export async function fetchClaudeUsage(accessToken: string, fetchImpl: FetchLike = fetch): Promise<UsageWindow[]> {
   const response = await fetchWithTimeout(CLAUDE_URL, {
     method: "GET",
@@ -558,7 +582,14 @@ export async function fetchClaudeUsage(accessToken: string, fetchImpl: FetchLike
       Accept: "application/json",
     },
   }, fetchImpl)
-  if (response.status === 429) throw new Error("Claude rate limited — retrying later")
+  if (response.status === 429) {
+    // Anthropic answers an expired or unknown OAuth token with 429 rather than
+    // 401, so this is not always a real rate limit. Honour the retry window
+    // instead of hammering the endpoint every poll.
+    const seconds = Number(response.headers.get("retry-after"))
+    const retryAfterMs = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : undefined
+    throw new ProviderRateLimitError(`Claude rate limited${formatRetryAfter(retryAfterMs)}`, retryAfterMs)
+  }
   if (!response.ok) {
     throw await errorFrom(response, "Anthropic", "Claude session expired — re-authenticate with Claude Code")
   }
@@ -1815,13 +1846,15 @@ export async function checkProviderUsage(
   const spec = PROVIDERS.find(p => p.id === providerId)
   if (!spec) return { providerId, providerName: providerId, configured: false, ok: false, status: "Unknown provider" }
 
-  const finishError = (configured: boolean, message: string): ProviderUsageResult => ({
+  const finishError = (configured: boolean, message: string, retryAfterMs?: number): ProviderUsageResult => ({
     providerId: spec.id,
     providerName: spec.name,
     configured,
     ok: false,
     status: message.startsWith(spec.name) ? message : `${spec.name} — ${message}`,
     error: message,
+    // Omit rather than set undefined: the RPC encodes the result as JSON.
+    ...(retryAfterMs != null ? { retryAfterMs } : {}),
   })
 
   // Providers that manage their own credentials outside the generic resolver.
@@ -1895,11 +1928,16 @@ export async function checkProviderUsage(
     // an `external` marker, so read Claude Code's OAuth token directly.
     const cli = getClaudeCliCredential()
     if (!cli?.token) return finishError(false, "not configured")
+    if (isCredentialExpired(cli)) {
+      return finishError(true, "Claude Code session expired — run `claude` to refresh its login")
+    }
     try {
       const windows = await fetchClaudeUsage(cli.token, fetchImpl)
       return { providerId: spec.id, providerName: spec.name, configured: true, ok: true, status: summarize(spec.name, windows), windows }
     } catch (err) {
-      return finishError(true, err instanceof Error ? err.message : "Request failed")
+      const message = err instanceof Error ? err.message : "Request failed"
+      const retryAfterMs = err instanceof ProviderRateLimitError ? err.retryAfterMs : undefined
+      return finishError(true, message, retryAfterMs)
     }
   }
   if (!secret) {
@@ -1949,10 +1987,18 @@ export async function checkProviderUsage(
       case "claude": {
         // An OpenCode `anthropic` entry may be a plain API key (the usage
         // endpoint rejects those) or a stale OAuth token; retry with Claude
-        // Code's own credential when the stored one is rejected.
-        const candidates: string[] = [secret]
+        // Code's own credential when the stored one is rejected. Expired
+        // tokens are dropped up front: Anthropic answers them with 429, which
+        // both hides the real cause and keeps the rate-limit window open.
+        const candidates: string[] = []
+        if (secret && !isCredentialExpired({ expires: resolved.expires })) candidates.push(secret)
         const cli = getClaudeCliCredential()
-        if (cli?.token && cli.token !== secret) candidates.push(cli.token)
+        if (cli?.token && cli.token !== secret && !isCredentialExpired(cli)) candidates.push(cli.token)
+
+        if (candidates.length === 0) {
+          throw new Error("Claude Code session expired — run `claude` to refresh its login")
+        }
+
         let claudeWindows: UsageWindow[] | null = null
         let lastErr: unknown = null
         for (const candidate of candidates) {
@@ -1963,7 +2009,8 @@ export async function checkProviderUsage(
           } catch (err) {
             lastErr = err
             const isLast = candidate === candidates[candidates.length - 1]
-            if (isLast || !isClaudeAuthError(err)) throw err
+            const retryable = isClaudeAuthError(err) || err instanceof ProviderRateLimitError
+            if (isLast || !retryable) throw err
           }
         }
         if (!claudeWindows) throw lastErr
@@ -2021,7 +2068,8 @@ export async function checkProviderUsage(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Request failed"
-    return finishError(true, message)
+    const retryAfterMs = err instanceof ProviderRateLimitError ? err.retryAfterMs : undefined
+    return finishError(true, message, retryAfterMs)
   }
 }
 

@@ -9,7 +9,7 @@ import type { ProviderConfig, ProviderResult, Settings } from "../rpc.js"
 const TTL_MS = 60_000
 const CONCURRENCY = 4
 
-const cache = new Map<string, { at: number; value: ProviderResult }>()
+const cache = new Map<string, { at: number; ttl: number; value: ProviderResult }>()
 
 async function snapshot(providerId: string): Promise<ProviderResult> {
   try {
@@ -33,7 +33,7 @@ export async function providerSnapshots(ids: readonly string[], force = false): 
 
   for (const id of ids) {
     const hit = cache.get(id)
-    if (!force && hit && now - hit.at < TTL_MS) results.set(id, hit.value)
+    if (!force && hit && now - hit.at < hit.ttl) results.set(id, hit.value)
     else pending.push(id)
   }
 
@@ -42,7 +42,12 @@ export async function providerSnapshots(ids: readonly string[], force = false): 
     const settled = await Promise.all(batch.map(id => snapshot(id)))
     settled.forEach((value, offset) => {
       const id = batch[offset]!
-      cache.set(id, { at: Date.now(), value })
+      // A provider's own Retry-After wins over the default TTL, so a 429 is
+      // not re-requested every poll while its window is still open.
+      const ttl = value.retryAfterMs != null && value.retryAfterMs > 0
+        ? Math.min(value.retryAfterMs, 6 * 60 * 60_000)
+        : TTL_MS
+      cache.set(id, { at: Date.now(), value, ttl })
       results.set(id, value)
     })
   }

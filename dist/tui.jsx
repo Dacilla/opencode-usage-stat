@@ -1667,6 +1667,25 @@ function parseClaudeUsage(payload) {
   }
   return out.filter((w, i) => out.findIndex((o) => o.label === w.label) === i);
 }
+var ProviderRateLimitError = class extends Error {
+  constructor(message, retryAfterMs) {
+    super(message);
+    this.retryAfterMs = retryAfterMs;
+    this.name = "ProviderRateLimitError";
+  }
+  retryAfterMs;
+};
+function isCredentialExpired(credential) {
+  if (!credential || typeof credential.expires !== "number" || !Number.isFinite(credential.expires)) return false;
+  return credential.expires <= Date.now() + 6e4;
+}
+function formatRetryAfter(ms) {
+  if (ms == null || !Number.isFinite(ms) || ms <= 0) return "";
+  const minutes = Math.round(ms / 6e4);
+  if (minutes < 60) return ` \u2014 retry in ${Math.max(1, minutes)}m`;
+  const hours = Math.round(minutes / 60);
+  return ` \u2014 retry in ${hours}h`;
+}
 async function fetchClaudeUsage(accessToken, fetchImpl = fetch) {
   const response = await fetchWithTimeout(CLAUDE_URL, {
     method: "GET",
@@ -1676,7 +1695,11 @@ async function fetchClaudeUsage(accessToken, fetchImpl = fetch) {
       Accept: "application/json"
     }
   }, fetchImpl);
-  if (response.status === 429) throw new Error("Claude rate limited \u2014 retrying later");
+  if (response.status === 429) {
+    const seconds = Number(response.headers.get("retry-after"));
+    const retryAfterMs = Number.isFinite(seconds) && seconds > 0 ? seconds * 1e3 : void 0;
+    throw new ProviderRateLimitError(`Claude rate limited${formatRetryAfter(retryAfterMs)}`, retryAfterMs);
+  }
   if (!response.ok) {
     throw await errorFrom(response, "Anthropic", "Claude session expired \u2014 re-authenticate with Claude Code");
   }
@@ -2652,13 +2675,15 @@ function paceMarkerIndex(win, mode, width, nowMs = Date.now()) {
 async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential = defaultCredentialResolver, getCodexCliCredential = resolveCodexCliCredential, getClaudeCliCredential = resolveClaudeCliCredential) {
   const spec = PROVIDERS.find((p) => p.id === providerId);
   if (!spec) return { providerId, providerName: providerId, configured: false, ok: false, status: "Unknown provider" };
-  const finishError = (configured, message) => ({
+  const finishError = (configured, message, retryAfterMs) => ({
     providerId: spec.id,
     providerName: spec.name,
     configured,
     ok: false,
     status: message.startsWith(spec.name) ? message : `${spec.name} \u2014 ${message}`,
-    error: message
+    error: message,
+    // Omit rather than set undefined: the RPC encodes the result as JSON.
+    ...retryAfterMs != null ? { retryAfterMs } : {}
   });
   if (spec.id === "ollama-cloud") {
     const cookie = resolveOllamaCloudCookie();
@@ -2719,11 +2744,16 @@ async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential =
   if (!secret && spec.id === "claude") {
     const cli = getClaudeCliCredential();
     if (!cli?.token) return finishError(false, "not configured");
+    if (isCredentialExpired(cli)) {
+      return finishError(true, "Claude Code session expired \u2014 run `claude` to refresh its login");
+    }
     try {
       const windows = await fetchClaudeUsage(cli.token, fetchImpl);
       return { providerId: spec.id, providerName: spec.name, configured: true, ok: true, status: summarize(spec.name, windows), windows };
     } catch (err) {
-      return finishError(true, err instanceof Error ? err.message : "Request failed");
+      const message = err instanceof Error ? err.message : "Request failed";
+      const retryAfterMs = err instanceof ProviderRateLimitError ? err.retryAfterMs : void 0;
+      return finishError(true, message, retryAfterMs);
     }
   }
   if (!secret) {
@@ -2765,9 +2795,13 @@ async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential =
         break;
       }
       case "claude": {
-        const candidates = [secret];
+        const candidates = [];
+        if (secret && !isCredentialExpired({ expires: resolved.expires })) candidates.push(secret);
         const cli = getClaudeCliCredential();
-        if (cli?.token && cli.token !== secret) candidates.push(cli.token);
+        if (cli?.token && cli.token !== secret && !isCredentialExpired(cli)) candidates.push(cli.token);
+        if (candidates.length === 0) {
+          throw new Error("Claude Code session expired \u2014 run `claude` to refresh its login");
+        }
         let claudeWindows = null;
         let lastErr = null;
         for (const candidate of candidates) {
@@ -2778,7 +2812,8 @@ async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential =
           } catch (err) {
             lastErr = err;
             const isLast = candidate === candidates[candidates.length - 1];
-            if (isLast || !isClaudeAuthError(err)) throw err;
+            const retryable = isClaudeAuthError(err) || err instanceof ProviderRateLimitError;
+            if (isLast || !retryable) throw err;
           }
         }
         if (!claudeWindows) throw lastErr;
@@ -2836,7 +2871,8 @@ async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential =
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Request failed";
-    return finishError(true, message);
+    const retryAfterMs = err instanceof ProviderRateLimitError ? err.retryAfterMs : void 0;
+    return finishError(true, message, retryAfterMs);
   }
 }
 function summarize(name, windows) {
@@ -23251,7 +23287,9 @@ var ProviderResultSchema = external_exports.object({
   status: external_exports.string(),
   error: external_exports.string().optional(),
   windows: external_exports.array(UsageWindowSchema).optional(),
-  planLabel: external_exports.string().nullable().optional()
+  planLabel: external_exports.string().nullable().optional(),
+  /** Suppress polling until this delay elapses (from a provider's Retry-After). */
+  retryAfterMs: external_exports.number().optional()
 });
 var ReportScopeSchema = external_exports.object({
   kind: external_exports.enum(["session", "5h", "7d", "30d", "all", "days"]),

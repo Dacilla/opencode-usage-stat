@@ -233,8 +233,10 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 }
 .ous-pstrip {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 24px;
   padding: 6px 12px;
   border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
   font-size: 11px;
@@ -242,12 +244,12 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
   white-space: nowrap;
 }
 .ous-pstrip-empty { opacity: .5; }
-.ous-prow { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.ous-prow { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ous-pname {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 132px;
+  max-width: 150px;
   flex: none;
   min-width: 0;
   margin: 0;
@@ -261,13 +263,13 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 .ous-pname:hover .ous-pname-text { text-decoration: underline; text-underline-offset: 2px; }
 .ous-pname-text { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
 .ous-pstatus { opacity: .6; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.ous-pwins { display: flex; flex-wrap: wrap; gap: 4px 18px; min-width: 0; }
+.ous-pwins { display: flex; flex-wrap: wrap; gap: 4px 16px; min-width: 0; }
 .ous-pwin { display: flex; align-items: center; gap: 6px; }
 .ous-pwin-label { opacity: .55; }
 .ous-pwin-track {
   position: relative;
   display: block;
-  width: 56px;
+  width: 44px;
   height: 4px;
   border-radius: 2px;
   flex: none;

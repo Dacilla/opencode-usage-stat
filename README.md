@@ -9,7 +9,7 @@ Token usage statistics and polished offline HTML dashboards for **OpenCode V2** 
 
 It also adds an opt-in **Provider Usage** sidebar block with 19 integrations, including **OpenCode Go**, **Codex**, **Claude**, **Ollama Cloud**, **Command Code**, and tracked **Droid / Factory** consumption (~15 s timeout, auto-refresh every 2 minutes). Plugin-backed Devin and Droid rows additionally require their provider plugin and an enabled model at the current location.
 
-Everything runs locally. V2 has no `opencode db` CLI, so all aggregation uses the V2 client (`@opencode-ai/client` OpenCodeClient, exposed as `context.client`) — sessions and messages are fetched through the V2 API (cursor-paginated `session.list` / `message.list`) and folded into the same report contract the dashboards expect.
+Everything runs locally. V2 has no `opencode db` CLI, so all aggregation runs in the server part through the V2 client API — locally over the SQLite database when it matches the server, otherwise through cursor-paginated `session.list` / `message.list` — and is folded into the same report contract the dashboards expect.
 
 ## Features
 
@@ -61,7 +61,7 @@ Single self-contained HTML files (ECharts, background, icons, styles embedded). 
 
 ## Requirements
 
-- OpenCode V2 (`opencode2`), plugin SDK `@opencode-ai/plugin` (V2 `Plugin.define` entrypoints)
+- OpenCode V2 (`opencode2`), plugin SDK `@opencode/plugin` 2.2.x (`Plugin.define` entrypoints)
 - Node.js `>= 18`
 - npm
 
@@ -93,17 +93,62 @@ Add the package directory to your OpenCode V2 plugin config (e.g. `opencode.json
 }
 ```
 
-The plugin exposes three entries: `.` / `./server` (V2 server definition via `Plugin.define({ id: "opencode-usage-stat", tui: true, setup })`) and `./tui` (V2 TUI module via `@opencode-ai/plugin/tui` `Plugin.define`). Restart opencode2 after changing plugin configuration.
+The plugin exposes four entries from one package:
+
+| Entry | Part | Runs in |
+|---|---|---|
+| `.` / `./server` | server definition (`@opencode/plugin`) | OpenCode server |
+| `./tui` | terminal UI (`@opencode/plugin/tui`) | the CLI's TUI process |
+| `./gui-experimental` | desktop UI (`@opencode/plugin/gui`) | OpenCode Desktop windows + Electron main |
+| `./rpc` | typed contract (`Rpc.define`) | imported by the other parts and by clients |
+
+The server part owns everything that touches the machine: durable settings,
+provider credentials and quota fetches, report files, and the aggregation
+client. The TUI and the desktop GUI are front-ends over that one implementation;
+the desktop window has no filesystem access, so it reads session usage from the
+host's synced store and everything else over RPC.
+
+```text
+src/gui.tsx              Desktop entry: panel, /usage command, composer pill,
+                         settings page, styles
+src/gui/                 Solid components, window state, pure aggregation
+src/rpc.ts               Rpc.define(Usage) with Zod schemas
+src/server.ts            Server entry: registers the RPC implementation
+src/server/              settings, provider snapshots, report writing, client
+src/tui.tsx              Terminal entry (unchanged rendering)
+src/report-file.ts       Report path, retention and file writing
+```
+
+Restart opencode2 after changing plugin configuration. The desktop app reads
+plugins from the global `opencode.json(c)`.
+
+## Desktop
+
+The desktop part adds:
+
+- **Usage panel** in the session side region (tab title, drag to a bottom pane,
+  narrow-window view), with live totals per model, cache hit rate, distribution
+  bars, cost, and provider quota rows.
+- **Composer pill** showing the current session's tokens and cache rate.
+- **`/usage` command** in the palette and the composer slash menu, with
+  `mod+shift+u`, plus `/usage settings`, `/usage <days>` and `/usage all`.
+- **Settings → Usage Stat** page: display toggles, provider enablement, quota
+  display mode, language, and one-click HTML reports.
+- **Provider quotas** fetched by the server, cached for 60 seconds and shared
+  across windows.
+
+A report generated from the desktop is written by the server to
+`~/.opencode/reports/` and can be revealed in the file manager from the toast.
 
 ## Provider credentials
 
-Provider usage checks are disabled by default. Enable them explicitly in the TUI plugin entry; credentials remain outside configuration:
+Provider usage checks are disabled by default. Enable them in the plugin's `options` (the same values reach the server, TUI and desktop parts); credentials remain outside configuration. Once enabled, the desktop Settings page can flip individual providers without editing configuration.
 
 ```jsonc
 {
   "plugins": [
     {
-      "package": "/absolute/path/to/opencode-usage-stat/dist/tui.jsx",
+      "package": "opencode-usage-stat",
       "options": {
         "providerUsage": {
           "opencode-go": true,
@@ -252,17 +297,21 @@ Project structure:
 
 ```text
 src/
-  server.ts                V2 server entry (Plugin.define, id, tui:true, command.transform)
-  tui.tsx                  V2 TUI entry (Plugin.define, data.on, ui.slot, keymap.layer)
-  commands.tsx             /usage keymap slash commands → local dialogs/dashboards
-  sidebar.tsx              TokenWatch-style panel + Provider Usage blocks
-  provider-usage.ts        OpenCode Go / DeepSeek / Codex checks
+  server.ts                Server entry: registers the RPC implementation
+  rpc.ts                   Rpc.define(Usage) — settings, providers, reports (published as ./rpc)
+  server/                  Settings store, provider snapshots, report writing, usage client
+  tui.tsx                  Terminal entry (Plugin.define, data.on, ui.slot, keymap.layer)
+  gui.tsx                  Desktop entry (panel, command, pill, settings page, styles)
+  gui/                     Solid components, window state, pure aggregation
+  commands.tsx             TUI /usage keymap slash commands → local dialogs/dashboards
+  sidebar.tsx              TokenWatch-style TUI panel + Provider Usage blocks
+  provider-usage.ts        Provider integrations (credentials resolved server-side)
   provider-usage-blocks.tsx TUI Provider Usage UI (default collapsed)
-  provider-collapse.ts     Pure collapse-state helpers (tested)
   credentials.ts           Secure credential resolution (V2 SQLite, env, safe .env)
   factory-keyring.ts       Factory CLI keyring decrypt + WorkOS token rotation
   droid-usage.ts           Droid session FSC RPC + Factory account quota
   queries.ts               V2 client aggregation (cursor pagination) → dashboard contract
+  report-file.ts           Report path, retention and file writing
   formatter.ts             Report + perf types & formatting
   pricing.ts               models.dev pricing & API-equivalent estimates
   html-common.ts           Shared visual system (self-contained ECharts/background)
@@ -271,7 +320,7 @@ src/
   total-usage-html.ts      Cumulative dashboard generator
   perf-tracker.ts          TTFT/TPS/latency tracker (first-output-aware)
   stats-store.ts           Persisted aggregate stats
-  theme-map.ts             ResolvedTheme → panel colors
+  theme-map.ts             ResolvedTheme → TUI panel colors
 assets/  icons/  vendor/   Embedded dashboard assets
 test/                      Offline unit tests (mocked client/fetch, no network)
 ```

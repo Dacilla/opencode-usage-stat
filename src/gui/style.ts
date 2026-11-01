@@ -4,6 +4,11 @@
  * palette so the panel reads correctly in light and dark themes.
  */
 export const panelCss = `
+:root {
+  --ous-cache: #3fb950;
+  --ous-input: #d29922;
+  --ous-output: #58a6ff;
+}
 .ous-root {
   display: flex;
   flex-direction: column;
@@ -11,9 +16,6 @@ export const panelCss = `
   padding: 12px;
   font-size: 12px;
   line-height: 1.45;
-  --ous-cache: #3fb950;
-  --ous-input: #d29922;
-  --ous-output: #58a6ff;
 }
 .ous-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .ous-kpi { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -106,7 +108,14 @@ export const panelCss = `
 .ous-uibar-wide {
   padding: 5px 12px;
   border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  gap: 12px;
 }
+.ous-uibar-wide .ous-uibar-track {
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 80px;
+}
+.ous-uibar-wide .ous-uibar-meta { flex: none; margin-left: auto; }
 .ous-uibar-total { font-weight: 600; white-space: nowrap; }
 .ous-uibar-track {
   display: flex;

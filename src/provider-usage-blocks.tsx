@@ -133,6 +133,7 @@ const PROVIDER_COLORS: Record<string, RGBA> = {
   "minimax-coding-plan": RGBA.fromInts(255, 100, 140, 255),
   "minimax-cn-coding-plan": RGBA.fromInts(230, 90, 130, 255),
   openrouter: RGBA.fromInts(150, 120, 255, 255),
+  refuseless: RGBA.fromInts(240, 90, 105, 255),
   "ollama-cloud": RGBA.fromInts(160, 168, 178, 255),
   "github-copilot": RGBA.fromInts(110, 150, 235, 255),
   "github-copilot-addon": RGBA.fromInts(130, 165, 250, 255),

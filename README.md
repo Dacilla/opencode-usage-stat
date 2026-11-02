@@ -201,6 +201,7 @@ Only providers set to `true` are queried. The plugin reads credentials **at runt
 | `minimax-coding-plan` | MiniMax Coding Plan (intl) | API key |
 | `minimax-cn-coding-plan` | MiniMax Coding Plan (CN) | API key |
 | `openrouter` | OpenRouter | API key |
+| `refuseless` | Refuseless | API key (`REFUSELESS_API_KEY`) |
 | `ollama-cloud` | Ollama Cloud | session cookie (secure JSON file) |
 | `github-copilot` / `github-copilot-addon` | GitHub Copilot | OAuth access token |
 | `google` | Google Gemini / Antigravity | OAuth refresh token (auth.json / antigravity-accounts.json) |
@@ -233,6 +234,7 @@ Resolution order (per provider):
    - z.ai: `ZAI_API_KEY`; Zhipu: `ZHIPUAI_CODING_PLAN_API_KEY` / `ZHIPU_API_KEY`
    - MiniMax: `MINIMAX_CODING_PLAN_API_KEY`; MiniMax CN: `MINIMAX_CN_CODING_PLAN_API_KEY`
    - OpenRouter: `OPENROUTER_API_KEY`
+   - Refuseless: `REFUSELESS_API_KEY`
    - Command Code: `COMMAND_CODE_API_KEY` or `COMMANDCODE_API_KEY`
 4. **Provider CLI auth files**:
    - Codex: `~/.codex/auth.json` (`{"tokens": {"access_token", "account_id"}}` — respects `CODEX_HOME`; read-only). Tried when the OpenCode token is missing or rejected by the usage endpoint.

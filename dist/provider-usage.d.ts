@@ -181,6 +181,24 @@ export declare const OPENROUTER_ENV_KEYS: string[];
 export declare const OPENROUTER_URL = "https://openrouter.ai/api/v1/credits";
 export declare function parseOpenRouterCredits(payload: unknown): UsageWindow[];
 export declare function fetchOpenRouterCredits(apiKey: string, fetchImpl?: FetchLike): Promise<UsageWindow[]>;
+export declare const REFUSELESS_ALIASES: string[];
+export declare const REFUSELESS_ENV_KEYS: string[];
+export declare const REFUSELESS_URL = "https://api.refuseless.com/v1/credits";
+/**
+ * The credits endpoint is free but has a slow tail (observed 1.5s-12s, and
+ * occasionally past the shared 15s provider budget), so it gets a longer budget
+ * than PROVIDER_TIMEOUT_MS. The retry is shorter: a second attempt starts from a
+ * warm connection, and the two together must stay inside one UI poll.
+ */
+export declare const REFUSELESS_TIMEOUT_MS = 18000;
+export declare const REFUSELESS_RETRY_TIMEOUT_MS = 10000;
+/**
+ * Parse a Refuseless credit balance. `available` is what a new request can
+ * reserve (balance minus in-flight holds, capped by the key budget); `reserved`
+ * is held right now by requests that have not settled. The endpoint is free.
+ */
+export declare function parseRefuselessCredits(payload: unknown): UsageWindow[];
+export declare function fetchRefuselessCredits(apiKey: string, fetchImpl?: FetchLike): Promise<UsageWindow[]>;
 export declare const OLLAMA_CLOUD_ALIASES: string[];
 export declare const OLLAMA_CLOUD_ENV_KEYS: string[];
 export interface OllamaCloudCredential {
@@ -309,7 +327,7 @@ export declare function devinGatePlugins(state: {
     seq: number;
     pluginIds: readonly string[];
 };
-export type ProviderId = "opencode-go" | "deepseek" | "codex" | "claude" | "kimi-for-coding" | "zai-coding-plan" | "zhipuai-coding-plan" | "minimax-coding-plan" | "minimax-cn-coding-plan" | "openrouter" | "ollama-cloud" | "github-copilot" | "github-copilot-addon" | "google" | "xai" | "cursor" | "command-code" | "devin" | "droid";
+export type ProviderId = "opencode-go" | "deepseek" | "codex" | "claude" | "kimi-for-coding" | "zai-coding-plan" | "zhipuai-coding-plan" | "minimax-coding-plan" | "minimax-cn-coding-plan" | "openrouter" | "refuseless" | "ollama-cloud" | "github-copilot" | "github-copilot-addon" | "google" | "xai" | "cursor" | "command-code" | "devin" | "droid";
 interface ProviderSpec {
     id: ProviderId;
     name: string;

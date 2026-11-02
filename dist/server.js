@@ -22079,6 +22079,57 @@ async function fetchOpenRouterCredits(apiKey, fetchImpl = fetch) {
   if (windows.length === 0) throw new Error("OpenRouter credit data could not be parsed");
   return windows;
 }
+var REFUSELESS_ALIASES = ["refuseless"];
+var REFUSELESS_ENV_KEYS = ["REFUSELESS_API_KEY"];
+var REFUSELESS_URL = "https://api.refuseless.com/v1/credits";
+var REFUSELESS_TIMEOUT_MS = 18e3;
+var REFUSELESS_RETRY_TIMEOUT_MS = 1e4;
+function toUsdAmount(value) {
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+function isAbortError(error62) {
+  if (!(error62 instanceof Error)) return false;
+  if (error62.name === "AbortError" || error62.name === "TimeoutError") return true;
+  return /operation was aborted|the operation was aborted|aborted/i.test(error62.message);
+}
+function parseRefuselessCredits(payload) {
+  const data = asObject(payload);
+  const balance = toUsdAmount(data?.balance);
+  const reserved = toUsdAmount(data?.reserved) ?? 0;
+  const available = toUsdAmount(data?.available) ?? (balance != null ? Math.max(0, balance - reserved) : null);
+  if (available == null) return [];
+  const parts = [`$${fmtMoney(available)} left`];
+  if (reserved > 0) parts.push(`$${fmtMoney(reserved)} held`);
+  const keyLimit = toUsdAmount(data?.key_limit);
+  if (keyLimit != null) parts.push(`$${fmtMoney(keyLimit)} key budget`);
+  return [{ label: "Credits", percent: null, resetsAt: null, valueLabel: parts.join(" \xB7 ") }];
+}
+async function fetchRefuselessCredits(apiKey, fetchImpl = fetch) {
+  const request = async (timeoutMs) => {
+    const response = await fetchWithTimeout(REFUSELESS_URL, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" }
+    }, fetchImpl, timeoutMs);
+    if (!response.ok) {
+      throw await errorFrom(response, "Refuseless", "Refuseless authentication failed \u2014 check REFUSELESS_API_KEY");
+    }
+    const windows = parseRefuselessCredits(await response.json().catch(() => null));
+    if (windows.length === 0) throw new Error("Refuseless credit data could not be parsed");
+    return windows;
+  };
+  try {
+    return await request(REFUSELESS_TIMEOUT_MS);
+  } catch (err) {
+    if (!isAbortError(err)) throw err;
+    try {
+      return await request(REFUSELESS_RETRY_TIMEOUT_MS);
+    } catch (retryErr) {
+      if (isAbortError(retryErr)) throw new Error("credits request timed out (retrying next poll)");
+      throw retryErr;
+    }
+  }
+}
 var OLLAMA_CLOUD_ALIASES = ["ollama-cloud", "ollama"];
 var OLLAMA_CLOUD_ENV_KEYS = [];
 function resolveOllamaCloudCookie() {
@@ -22791,6 +22842,7 @@ var PROVIDERS = [
   { id: "minimax-coding-plan", name: "MiniMax Coding Plan", aliases: MINIMAX_ALIASES, envKeys: MINIMAX_ENV_KEYS },
   { id: "minimax-cn-coding-plan", name: "MiniMax Coding Plan (CN)", aliases: MINIMAX_CN_ALIASES, envKeys: MINIMAX_CN_ENV_KEYS },
   { id: "openrouter", name: "OpenRouter", aliases: OPENROUTER_ALIASES, envKeys: OPENROUTER_ENV_KEYS },
+  { id: "refuseless", name: "Refuseless", aliases: REFUSELESS_ALIASES, envKeys: REFUSELESS_ENV_KEYS },
   { id: "ollama-cloud", name: "Ollama Cloud", aliases: OLLAMA_CLOUD_ALIASES, envKeys: OLLAMA_CLOUD_ENV_KEYS },
   { id: "github-copilot", name: "GitHub Copilot", aliases: COPILOT_ALIASES, envKeys: COPILOT_ENV_KEYS },
   { id: "github-copilot-addon", name: "Copilot Add-on", aliases: COPILOT_ALIASES, envKeys: COPILOT_ENV_KEYS },
@@ -22980,6 +23032,9 @@ async function checkProviderUsage(providerId, fetchImpl = fetch, getCredential =
         break;
       case "openrouter":
         windows = await fetchOpenRouterCredits(secret, fetchImpl);
+        break;
+      case "refuseless":
+        windows = await fetchRefuselessCredits(secret, fetchImpl);
         break;
       case "github-copilot":
         windows = await fetchCopilotUsage(secret, false, fetchImpl);

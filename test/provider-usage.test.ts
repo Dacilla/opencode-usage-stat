@@ -9,6 +9,8 @@ import {
   parseZhipuaiUsage,
   parseMiniMaxUsage,
   parseOpenRouterCredits,
+  parseRefuselessCredits,
+  fetchRefuselessCredits,
   parseOllamaSettingsHtml,
   buildCopilotWindows,
   parseCursorUsage,
@@ -658,6 +660,56 @@ test("parseOpenRouterCredits formats remaining/spent label", () => {
   const windows = parseOpenRouterCredits({ data: { total_credits: 50, total_usage: 12.5 } })
   assert.equal(windows[0].valueLabel, "$37.50 left · $12.50 spent")
   assert.deepEqual(parseOpenRouterCredits({ data: {} }), [])
+})
+
+test("parseRefuselessCredits formats available balance and in-flight holds", () => {
+  const windows = parseRefuselessCredits({
+    object: "credits",
+    balance: 4.947726,
+    reserved: 0,
+    available: 4.947726,
+    key_limit: null,
+    unit: "usd",
+    updated_at: 1793580724,
+  })
+  assert.equal(windows.length, 1)
+  assert.equal(windows[0].label, "Credits")
+  assert.equal(windows[0].valueLabel, "$4.95 left")
+  assert.equal(windows[0].percent, null)
+})
+
+test("parseRefuselessCredits shows holds and key budget when present", () => {
+  const windows = parseRefuselessCredits({ balance: 10, reserved: 1.2, available: 8.8, key_limit: 5 })
+  assert.equal(windows[0].valueLabel, "$8.80 left · $1.20 held · $5.00 key budget")
+  // available omitted: derive it from balance minus reserved
+  assert.equal(parseRefuselessCredits({ balance: 3, reserved: 0.5 })[0].valueLabel, "$2.50 left · $0.50 held")
+  assert.deepEqual(parseRefuselessCredits({}), [])
+  assert.deepEqual(parseRefuselessCredits(null), [])
+})
+
+test("fetchRefuselessCredits retries once after an abort", async () => {
+  let calls = 0
+  const fetchImpl = (async () => {
+    calls++
+    if (calls === 1) {
+      const abort = new Error("The operation was aborted")
+      abort.name = "AbortError"
+      throw abort
+    }
+    return { ok: true, json: async () => ({ available: 1 }) } as Response
+  }) as unknown as typeof fetch
+  const windows = await fetchRefuselessCredits("key", fetchImpl)
+  assert.equal(windows[0].valueLabel, "$1.00 left")
+  assert.equal(calls, 2)
+})
+
+test("fetchRefuselessCredits reports a readable message when both attempts abort", async () => {
+  const fetchImpl = (async () => {
+    const abort = new Error("The operation was aborted")
+    abort.name = "AbortError"
+    throw abort
+  }) as unknown as typeof fetch
+  await assert.rejects(() => fetchRefuselessCredits("key", fetchImpl), /credits request timed out/)
 })
 
 test("parseOllamaSettingsHtml scrapes session/weekly/premium percentages", () => {

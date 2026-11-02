@@ -14,6 +14,8 @@
 //   - zhipuai-coding-plan GET https://open.bigmodel.cn/api/monitor/usage/quota/limit (API key)
 //   - minimax-coding-plan / minimax-cn-coding-plan coding_plan/remains endpoints
 //   - openrouter    GET https://openrouter.ai/api/v1/credits (API key)
+//   - refuseless    GET https://api.refuseless.com/v1/credits (API key; free
+//                   read, 60/minute; balance/reserved/available in USD)
 //   - ollama-cloud  session cookie + HTML scrape of https://ollama.com/settings
 //                   (cookie from a secure local JSON file, never env/logs)
 //   - github-copilot / github-copilot-addon  copilot_internal/user quota snapshots
@@ -867,6 +869,79 @@ export async function fetchOpenRouterCredits(apiKey: string, fetchImpl: FetchLik
   const windows = parseOpenRouterCredits(await response.json().catch(() => null))
   if (windows.length === 0) throw new Error("OpenRouter credit data could not be parsed")
   return windows
+}
+
+// ── Refuseless ──
+
+export const REFUSELESS_ALIASES = ["refuseless"]
+export const REFUSELESS_ENV_KEYS = ["REFUSELESS_API_KEY"]
+export const REFUSELESS_URL = "https://api.refuseless.com/v1/credits"
+/**
+ * The credits endpoint is free but has a slow tail (observed 1.5s-12s, and
+ * occasionally past the shared 15s provider budget), so it gets a longer budget
+ * than PROVIDER_TIMEOUT_MS. The retry is shorter: a second attempt starts from a
+ * warm connection, and the two together must stay inside one UI poll.
+ */
+export const REFUSELESS_TIMEOUT_MS = 18_000
+export const REFUSELESS_RETRY_TIMEOUT_MS = 10_000
+
+function toUsdAmount(value: unknown): number | null {
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN
+  return Number.isFinite(n) ? n : null
+}
+
+/** AbortController cancellation surfaces as a DOMException named AbortError. */
+function isAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  if (error.name === "AbortError" || error.name === "TimeoutError") return true
+  return /operation was aborted|the operation was aborted|aborted/i.test(error.message)
+}
+
+/**
+ * Parse a Refuseless credit balance. `available` is what a new request can
+ * reserve (balance minus in-flight holds, capped by the key budget); `reserved`
+ * is held right now by requests that have not settled. The endpoint is free.
+ */
+export function parseRefuselessCredits(payload: unknown): UsageWindow[] {
+  const data = asObject(payload)
+  const balance = toUsdAmount(data?.balance)
+  const reserved = toUsdAmount(data?.reserved) ?? 0
+  const available = toUsdAmount(data?.available) ?? (balance != null ? Math.max(0, balance - reserved) : null)
+  if (available == null) return []
+  const parts = [`$${fmtMoney(available)} left`]
+  if (reserved > 0) parts.push(`$${fmtMoney(reserved)} held`)
+  const keyLimit = toUsdAmount(data?.key_limit)
+  if (keyLimit != null) parts.push(`$${fmtMoney(keyLimit)} key budget`)
+  return [{ label: "Credits", percent: null, resetsAt: null, valueLabel: parts.join(" · ") }]
+}
+
+export async function fetchRefuselessCredits(apiKey: string, fetchImpl: FetchLike = fetch): Promise<UsageWindow[]> {
+  const request = async (timeoutMs: number): Promise<UsageWindow[]> => {
+    const response = await fetchWithTimeout(REFUSELESS_URL, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+    }, fetchImpl, timeoutMs)
+    if (!response.ok) {
+      throw await errorFrom(response, "Refuseless", "Refuseless authentication failed — check REFUSELESS_API_KEY")
+    }
+    const windows = parseRefuselessCredits(await response.json().catch(() => null))
+    if (windows.length === 0) throw new Error("Refuseless credit data could not be parsed")
+    return windows
+  }
+
+  try {
+    return await request(REFUSELESS_TIMEOUT_MS)
+  } catch (err) {
+    // One retry only for a cancellation: the call is free, so a slow first
+    // attempt should not turn into a minute of "aborted" in the sidebar.
+    if (!isAbortError(err)) throw err
+    try {
+      return await request(REFUSELESS_RETRY_TIMEOUT_MS)
+    } catch (retryErr) {
+      if (isAbortError(retryErr)) throw new Error("credits request timed out (retrying next poll)")
+      throw retryErr
+    }
+  }
 }
 
 // ── Ollama Cloud (session cookie + settings page scrape) ──
@@ -1769,7 +1844,7 @@ export function devinGatePlugins(
 export type ProviderId =
   | "opencode-go" | "deepseek" | "codex" | "claude" | "kimi-for-coding"
   | "zai-coding-plan" | "zhipuai-coding-plan" | "minimax-coding-plan" | "minimax-cn-coding-plan"
-  | "openrouter" | "ollama-cloud" | "github-copilot" | "github-copilot-addon"
+  | "openrouter" | "refuseless" | "ollama-cloud" | "github-copilot" | "github-copilot-addon"
   | "google" | "xai" | "cursor" | "command-code" | "devin" | "droid"
 
 interface ProviderSpec {
@@ -1790,6 +1865,7 @@ export const PROVIDERS: readonly ProviderSpec[] = [
   { id: "minimax-coding-plan", name: "MiniMax Coding Plan", aliases: MINIMAX_ALIASES, envKeys: MINIMAX_ENV_KEYS },
   { id: "minimax-cn-coding-plan", name: "MiniMax Coding Plan (CN)", aliases: MINIMAX_CN_ALIASES, envKeys: MINIMAX_CN_ENV_KEYS },
   { id: "openrouter", name: "OpenRouter", aliases: OPENROUTER_ALIASES, envKeys: OPENROUTER_ENV_KEYS },
+  { id: "refuseless", name: "Refuseless", aliases: REFUSELESS_ALIASES, envKeys: REFUSELESS_ENV_KEYS },
   { id: "ollama-cloud", name: "Ollama Cloud", aliases: OLLAMA_CLOUD_ALIASES, envKeys: OLLAMA_CLOUD_ENV_KEYS },
   { id: "github-copilot", name: "GitHub Copilot", aliases: COPILOT_ALIASES, envKeys: COPILOT_ENV_KEYS },
   { id: "github-copilot-addon", name: "Copilot Add-on", aliases: COPILOT_ALIASES, envKeys: COPILOT_ENV_KEYS },
@@ -2067,6 +2143,9 @@ export async function checkProviderUsage(
         break
       case "openrouter":
         windows = await fetchOpenRouterCredits(secret, fetchImpl)
+        break
+      case "refuseless":
+        windows = await fetchRefuselessCredits(secret, fetchImpl)
         break
       case "github-copilot":
         windows = await fetchCopilotUsage(secret, false, fetchImpl)
